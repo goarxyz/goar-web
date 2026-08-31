@@ -1,0 +1,62 @@
+/* GOAR boot + settings */
+:root{--muted:#666;--g-bg:#000;--g-fg:#e8e8e8;--g-line:#1a1a1a;--g-font:ui-monospace,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#1a1b1e;color:#ececec;font:14px/1.45 Inter,system-ui,sans-serif}
+#setup{position:relative;z-index:1;min-height:100dvh;width:100vw;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:0;background:transparent}
+#setup.hide{display:none}
+#setup .logo{display:none!important}
+#setup .word{display:none!important}
+#setup .bar{width:min(280px,78vw);height:2px;background:#2c2d31;overflow:hidden;border-radius:99px}
+#setup .bar>div,#barFill{height:100%;background:#ececec;transition:width .25s linear}
+#bootPhase{display:flex;flex-direction:column;align-items:center;gap:0;width:min(280px,78vw);margin:0}
+#bootMeta{display:flex;align-items:baseline;justify-content:space-between;width:100%;gap:10px}
+#pct{font:12px var(--g-font);color:#e8e8e8;min-width:2.6em}
+#step{font:12px var(--g-font);color:#888;flex:1;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#detail{font:11px var(--g-font);color:#444;max-width:100%;text-align:center;min-height:1.1em}
+#bootList{list-style:none;margin:12px 0 0;padding:0;width:min(240px,70vw)}
+#bootList li{display:flex;align-items:center;gap:8px;font:11px var(--g-font);color:#666;padding:4px 0}
+#bootList .dot{width:6px;height:6px;border-radius:50%;background:#333}
+#bootList li[data-state="on"] .dot,#bootList li[data-state="ok"] .dot{background:#3dd68c}
+#bootList li[data-state="run"] .dot{background:#e11d2e}
+#bootList .lab{flex:1}
+#bootList .st{color:#444}
+#bootList li[data-state="ok"] .st,#bootList li[data-state="on"] .st{color:#3dd68c}
+#err{color:#ff5555;font:12px var(--g-font);min-height:1.2em}
+#retry{display:none;margin-top:8px;padding:8px 14px;background:#111;border:1px solid #333;color:#ccc;border-radius:6px}
+#retry.show{display:inline-block}
+#bootList{display:none}
+#credPhase{display:flex;flex-direction:column;gap:10px;width:min(340px,92vw)}
+#credPhase.on{display:flex}
+#credPhase h2{margin:0;font-size:13px;letter-spacing:.2em}
+#credPhase .hint{margin:0;color:#666;font-size:12px}
+#credPhase label{font-size:11px;color:#888;display:block;margin-bottom:4px}
+#credPhase input,#credPhase select{width:100%;padding:10px 12px;background:#0a0a0a;border:1px solid #222;border-radius:8px;color:#eee;font:13px inherit}
+#credGo{margin-top:6px;padding:12px;background:#111;border:1px solid #333;color:#eee;border-radius:8px;font-weight:600;letter-spacing:.08em;cursor:pointer}
+#credGo:disabled{opacity:.4;cursor:not-allowed}
+#credStatus{font:11px var(--g-font);color:#666;min-height:1.2em}
+#credStatus.ok{color:#3dd68c}
+#credStatus.err{color:#ff5555}
+#credBaseWrap.auto-hidden label{color:#555}
+/* Design chrome owns #app layout; only gate visibility until boot */
+#app{display:none;height:100%;height:100dvh}
+#app.show{display:flex}
+#settings{display:none;position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:12px}
+#settings.open{display:flex}
+#settings .sheet{width:min(440px,100%);max-height:min(88dvh,640px);overflow:auto;background:#0a0a0a;border:1px solid #222;border-radius:16px 16px 12px 12px;padding:18px 16px 20px}
+#settings h2{margin:0 0 4px;font-size:15px;font-weight:600;letter-spacing:.06em;color:#ff1a1a}
+#settings .sub{margin:0 0 16px;color:#666;font-size:12px;line-height:1.45}
+#settings .field{margin-bottom:12px}
+#settings label{display:block;font-size:11px;color:#888;margin-bottom:4px}
+#settings input,#settings select{width:100%;min-height:44px;background:#111;border:1px solid #2a2a2a;border-radius:8px;color:#f2f2f2;padding:10px 12px;font:inherit}
+#settings .row-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+#settings .action{padding:10px 14px;border:1px solid #333;border-radius:8px;background:#111;color:#ccc;font:12px inherit;cursor:pointer}
+#settings .action.primary{border-color:#444;color:#fff}
+#settings .action.danger{border-color:#422;color:#f88}
+#settings .sep{height:1px;background:#1a1a1a;margin:14px 0}
+#settings .stat{font-size:11px;color:#555}
+#screen_container{position:fixed;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none}
+#kb{position:fixed;left:-9999px;opacity:0}
+#running{display:none}
+#statusbar{display:none}
+#dock{display:none}
+#termHost{display:none}

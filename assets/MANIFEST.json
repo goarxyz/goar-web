@@ -1,0 +1,5 @@
+{
+  "packaged": true,
+  "boot": "frozen.bin.gz",
+  "note": "Linux boots from the frozen image. Other files in this folder are the engine."
+}

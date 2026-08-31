@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GOAR</title>
+  <meta name="vscode:versionInfo" content="stable;1.133.0;a5b500951314efd502d07465bd138dfbd714a960">
+  <meta name="vscode:baseURL" content="https://main.vscode-cdn.net/stable/a5b500951314efd502d07465bd138dfbd714a960">
+  <link rel="stylesheet" href="https://main.vscode-cdn.net/stable/a5b500951314efd502d07465bd138dfbd714a960/out/vs/workbench/workbench.web.main.internal.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: #181818; color: #ccc; overflow: hidden; }
+    #fail { display: none; padding: 24px; font: 13px/1.5 ui-sans-serif, system-ui, sans-serif; }
+    #fail.on { display: block; }
+  </style>
+</head>
+<body>
+  <div id="fail"></div>
+  <script>
+    (function () {
+      var BASE = "https://main.vscode-cdn.net/stable/a5b500951314efd502d07465bd138dfbd714a960";
+      var COMMIT = "a5b500951314efd502d07465bd138dfbd714a960";
+      var ttp = window.trustedTypes && window.trustedTypes.createPolicy("amdLoader", {
+        createScriptURL: function (u) {
+          if (String(u).indexOf("https://main.vscode-cdn.net/") === 0) return u;
+          throw new Error("blocked script " + u);
+        }
+      });
+      globalThis._VSCODE_WEB_BOOTSTRAP_ = { quality: "stable", commit: COMMIT, baseUrl: BASE, trustedTypesPolicy: ttp };
+      globalThis._VSCODE_FILE_ROOT = BASE + "/out/";
+      globalThis._VSCODE_WEB_PACKAGE_TTP = ttp;
+    })();
+  </script>
+  <script src="https://main.vscode-cdn.net/nlsmetadata/a5b500951314efd502d07465bd138dfbd714a960/nls.messages.js"></script>
+  <script type="module">
+    import { create, URI } from "https://main.vscode-cdn.net/stable/a5b500951314efd502d07465bd138dfbd714a960/out/vs/workbench/workbench.web.main.internal.js";
+
+    const folder = URI.from({ scheme: "tmp", path: "/workspace" });
+    const opts = {
+      workspaceProvider: {
+        workspace: { folderUri: folder },
+        trusted: true,
+        open: async function () { return true; }
+      },
+      configurationDefaults: {
+        "workbench.colorTheme": "Default Dark Modern",
+        "workbench.startupEditor": "none",
+        "window.title": "GOAR",
+        "workbench.activityBar.location": "default"
+      },
+      productConfiguration: {
+        nameShort: "GOAR",
+        nameLong: "GOAR",
+        applicationName: "goar",
+        dataFolderName: ".goar-vscode",
+        version: "1.133.0",
+        commit: "a5b500951314efd502d07465bd138dfbd714a960",
+        quality: "stable",
+        enableTelemetry: false,
+        extensionsGallery: {
+          serviceUrl: "https://marketplace.visualstudio.com/_apis/public/gallery",
+          itemUrl: "https://marketplace.visualstudio.com/items",
+          resourceUrlTemplate: "https://{publisher}.vscode-unpkg.net/{publisher}/{name}/{version}/{path}",
+          controlUrl: "https://main.vscode-cdn.net/extensions/marketplace.json",
+          publisherUrl: "https://marketplace.visualstudio.com/publishers"
+        }
+      },
+      initialColorTheme: { themeType: "dark" },
+      enableWorkspaceTrust: false
+    };
+
+    try {
+      await create(document.body, opts);
+      try { parent.postMessage({ type: "goar-vscode", ready: true }, "*"); } catch (_) {}
+    } catch (e) {
+      const el = document.getElementById("fail");
+      el.className = "on";
+      el.textContent = (e && e.message) ? e.message : String(e);
+      try { parent.postMessage({ type: "goar-vscode", ready: false, error: String(e) }, "*"); } catch (_) {}
+    }
+  </script>
+</body>
+</html>
