@@ -594,16 +594,20 @@
             "src/LOAD_ORDER.json",
             "src/net/ssh-go-wasm.js",
             "src/net/ssh-plane.js",
+            "src/net/ssh-files.js",
             "src/sandbox/kali-only.js",
             "src/sandbox/ssh-guest-bridge.js",
             "src/boot/run-setup.js",
             "src/config/flags.js",
             "src/agent/vibe/system-prompt.js",
             "src/agent/vibe/runtime.js",
+            "src/agent/loop/sdk-bind.js",
             "src/agent/loop/turn.js",
+            "src/vendor/openai-agents-core.js",
             "src/providers/openai-chat.js",
             "src/providers/api.js",
-            "src/providers/peak-tokens.js"
+            "src/providers/peak-tokens.js",
+            "src/agent/tools/core-tools.js"
           ];
           await Promise.all(live.map(async function (p) {
             try {

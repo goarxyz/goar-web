@@ -1,7 +1,7 @@
 let CORE_AGENT_TOOLS = [
   { type: "function", function: {
     name: "bash",
-    description: "Shell command in Wasm Unix (cwd /workspace). Applets: ls cat grep find curl wget python3 pip. Same files as Python.",
+    description: "Shell command on the live Kali SSH VM (cwd /sec/workspace). Root. nmap, python3, curl, git, and the full Kali toolset.",
     parameters: { type: "object", properties: {
       command: { type: "string", description: "Shell command to run" },
       timeout_ms: { type: "number", description: "Timeout ms (default 60000)" }
@@ -9,7 +9,7 @@ let CORE_AGENT_TOOLS = [
   }},
   { type: "function", function: {
     name: "python_exec",
-    description: "Run Python (Pyodide Wasm). Pass inline code or a .py path. Last expression prints. Same /workspace as the shell.",
+    description: "Run python3 on the live Kali VM. Pass inline code or a .py path on /sec/workspace.",
     parameters: { type: "object", properties: {
       code: { type: "string", description: "Python source for python3 -c" },
       path: { type: "string", description: "Path to .py file on guest" },
@@ -19,7 +19,7 @@ let CORE_AGENT_TOOLS = [
   }},
   { type: "function", function: {
     name: "write_file",
-    description: "Write a complete UTF-8 file. Each call replaces the whole file. Prefer /workspace/...",
+    description: "Write a complete UTF-8 file on Kali. Each call replaces the whole file. Prefer /sec/workspace/...",
     parameters: { type: "object", properties: {
       path: { type: "string" },
       content: { type: "string", description: "Full file contents" }
@@ -27,7 +27,7 @@ let CORE_AGENT_TOOLS = [
   }},
   { type: "function", function: {
     name: "read_file",
-    description: "Read a text file from the guest filesystem.",
+    description: "Read a text file from the Kali filesystem.",
     parameters: { type: "object", properties: {
       path: { type: "string" },
       max_bytes: { type: "number" }

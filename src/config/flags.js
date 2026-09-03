@@ -19,3 +19,4 @@ window.GOAR_MAX_TOKENS = 8192;
 window.GOAR_PARALLEL_TOOLS = true;
 window.GOAR_SSH_BOOT_MS = 75000;
 window.GOAR_SKIP_WASM_UNIX = true;
+window.GOAR_SDK_RUNNER = true;

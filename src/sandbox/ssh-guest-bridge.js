@@ -29,6 +29,9 @@
   }
 
   async function sshPutFile(path, content) {
+    if (global.sshFiles && typeof global.sshFiles.put === "function") {
+      return global.sshFiles.put(path, content);
+    }
     const id = Math.random().toString(36).slice(2, 8);
     const b64 = b64utf8(content);
     const tmp = "/tmp/.gw." + id + ".b64";
@@ -116,6 +119,23 @@
     if (typeof sshExec === "function") {
       await bringSsh("read");
       if (sshLive()) {
+        if (global.sshFiles && typeof global.sshFiles.get === "function") {
+          const g = await global.sshFiles.get(path, maxb);
+          if (!g || Number(g.code) !== 0) return "error: read " + path + (g && g.output ? "\n" + g.output : "");
+          let text = String(g.content || "");
+          if (offset || limit) {
+            const lines = text.split("\n");
+            const start = offset > 0 ? offset : 1;
+            const from = Math.max(0, start - 1);
+            const slice = limit ? lines.slice(from, from + limit) : lines.slice(from);
+            return slice.map((line, i) => String(from + i + 1).padStart(9, " ") + "\u2192" + line).join("\n").slice(0, maxb);
+          }
+          const lines = text.split("\n");
+          if (lines.length > 1) {
+            return lines.map((line, i) => String(i + 1).padStart(9, " ") + "\u2192" + line).join("\n").slice(0, maxb);
+          }
+          return text.slice(0, maxb);
+        }
         const r = await global.guestExec("head -c " + maxb + " " + JSON.stringify(path), 30000);
         let text = String((r && r.output) || "");
         if (r && Number(r.code) !== 0 && !text) return "error: read " + path;
