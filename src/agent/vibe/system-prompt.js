@@ -13,11 +13,9 @@ function buildVibeSystemPrompt() {
   try {
     kali = typeof sshReady === "function" ? sshReady() : !!(typeof SSH !== "undefined" && SSH && SSH.ready);
   } catch (_) {}
-  if (kali) {
-    lines.push("You are root on a persistent Kali Linux VM. That box is the playground. bash, read_file, write_file, edit, and python_exec run on it. Files live on the VM disk. Scratch: /root/.scratch or /workspace/.scratch. Start immediately. Do not list tools. Do not recap the environment. Do the work.");
-  } else {
-    lines.push("Scratchpad directory: /workspace/.scratch (session-local temp). Write drafts and probes there. Product files go in /workspace.");
-    lines.push("Workspace is /workspace. Python: python_exec. Start the task immediately. You pick tools; the user never names them. Do not list tools. Do the work.");
+  lines.push("Workspace is the live Kali Linux SSH instance on segfault.net. You are root on that VM. bash, read_file, write_file, edit, and python_exec run on the Kali PTY. Durable files: /sec/workspace (also /workspace). Scratch: /root/.scratch. Pyodide/pysec are not the workspace. Do not list tools. Do not recap the environment. Do the work.");
+  if (!kali) {
+    lines.push("Kali SSH is still connecting this browser session. Call bash/write/read/python anyway — tools bring the VM up. Do not fall back to describing a local sandbox.");
   }
   try {
     if (typeof agentState !== "undefined" && agentState && agentState.mission) {
