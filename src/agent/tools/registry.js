@@ -14,9 +14,9 @@ function refreshAgentTools() {
     window.__GOAR_TOOL_SELECT = {
       mode: "compact",
       api: AGENT_TOOLS.length,
-      catalog: typeof PYSEC_TOOL_COUNT === "number" ? PYSEC_TOOL_COUNT : 196,
-      groups: ["bash", "write_file", "pysec_crypto", "pysec_http", "pysec_recon", "pysec_vuln", "pysec_analyze", "browse"],
-      max: 128,
+      catalog: 0,
+      groups: ["bash", "write_file", "read_file", "python_exec", "browse"],
+      max: 256,
       hits: 0,
     };
   } catch (_) {}
