@@ -165,7 +165,7 @@ async function agentTurn(userText) {
       let result;
       try {
         const call = () => openaiChatStream({
-        messages: (agentHistory[0] && agentHistory[0].role === "system" ? [agentHistory[0]] : []).concat(agentHistory.filter((m) => m && m.role !== "system").slice(-8)),
+        messages: (agentHistory[0] && agentHistory[0].role === "system" ? [agentHistory[0]] : []).concat(agentHistory.filter((m) => m && m.role !== "system").slice(-(Number(typeof GOAR_HISTORY_WINDOW !== "undefined" ? GOAR_HISTORY_WINDOW : 64) || 64))),
         tools: getAgentTools(),
         includeTools: true,
         signal: agentAbortController.signal,
@@ -209,7 +209,7 @@ async function agentTurn(userText) {
         if (/model is restarting|please resend|temporarily unavailable|overloaded|try again in a few/i.test(msg)) {
           if (typeof paintLiveWork === "function") paintLiveWork({ text: "Model restarting — retrying" });
           if (typeof setStatusFooter === "function") setStatusFooter("model restarting · retrying");
-          await new Promise((r) => setTimeout(r, 1800));
+          await new Promise((r) => setTimeout(r, 400));
           continue;
         }
         if (/context.?too.?long|maximum context|prompt is too long|reduce the length/i.test(msg)) {
@@ -249,7 +249,7 @@ async function agentTurn(userText) {
       if (!toolCalls.length && /model is restarting|please resend in a few seconds/i.test(content || thinking)) {
         if (typeof paintLiveWork === "function") paintLiveWork({ text: "Model restarting — retrying" });
         if (typeof setStatusFooter === "function") setStatusFooter("model restarting · retrying");
-        await new Promise((r) => setTimeout(r, 1800));
+        await new Promise((r) => setTimeout(r, 400));
         continue;
       }
       if (result.usage) {
@@ -455,7 +455,7 @@ async function agentTurn(userText) {
         });
         let stopRef = null;
         const last = await openaiChatStream({
-          messages: (agentHistory[0] && agentHistory[0].role === "system" ? [agentHistory[0]] : []).concat(agentHistory.filter((m) => m && m.role !== "system").slice(-8)),
+          messages: (agentHistory[0] && agentHistory[0].role === "system" ? [agentHistory[0]] : []).concat(agentHistory.filter((m) => m && m.role !== "system").slice(-(Number(typeof GOAR_HISTORY_WINDOW !== "undefined" ? GOAR_HISTORY_WINDOW : 64) || 64))),
           tools: [],
           includeTools: false,
           signal: agentAbortController.signal,

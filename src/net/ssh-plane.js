@@ -15,7 +15,7 @@
   const DEFAULT_HOST = "segfault.net";
   const DEFAULT_USER = "root";
   const DEFAULT_PASS = "segfault";
-  const DEFAULT_PORTS = [22, 443];
+  const DEFAULT_PORTS = [443, 22];
 
   const SSH = {
     ready: false,
@@ -357,6 +357,23 @@
       SSH.lastError = "tcp closed";
       scheduleReconnect();
     };
+    // Go WASM (sshclient-wasm) owns ident+kex. Hand the raw TCP socket first.
+    if (typeof global.__GOAR_SSH_DRIVE === "function") {
+      const drivenEarly = await global.__GOAR_SSH_DRIVE({
+        sock: sock,
+        incoming: function () {
+          return incoming;
+        },
+        user: user,
+        password: pass,
+        secret: opts.secret || readSecret(),
+        host: opts.host,
+        port: opts.port,
+        raw: true,
+      });
+      if (drivenEarly && drivenEarly.ready) return drivenEarly;
+    }
+
     sock.write(enc(ident));
     const banner = await waitUntil(
       function () {
@@ -369,12 +386,12 @@
     SSH.banner = banner;
     log("banner", banner);
 
-    // Send KEXINIT so a real server keeps the socket; full NEWKEYS is best-effort.
-    try {
-      sock.write(buildPacket(kexInitPayload(), 8));
-    } catch (_) {}
+    if (typeof global.__GOAR_SSH_DRIVE !== "function") {
+      try {
+        sock.write(buildPacket(kexInitPayload(), 8));
+      } catch (_) {}
+    }
 
-    // Best-effort: if a higher-level driver is present, hand the socket over.
     if (typeof global.__GOAR_SSH_DRIVE === "function") {
       const driven = await global.__GOAR_SSH_DRIVE({
         sock: sock,

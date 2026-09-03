@@ -21,13 +21,17 @@ async function runSetup() {
       : Promise.resolve(null);
     try { if (typeof startGeckoWarm === "function") startGeckoWarm(); } catch (_) {}
     let boot = Promise.resolve();
-    if (typeof bootWasmUnix === "function") {
+    const skipUnix = (typeof GOAR_SKIP_WASM_UNIX !== "undefined" && GOAR_SKIP_WASM_UNIX)
+      || (typeof GOAR_KALI_ONLY !== "undefined" && GOAR_KALI_ONLY);
+    if (!skipUnix && typeof bootWasmUnix === "function") {
       boot = bootWasmUnix();
     }
+    const waitMs = (typeof GOAR_SSH_BOOT_MS === "number" && GOAR_SSH_BOOT_MS > 0) ? GOAR_SSH_BOOT_MS : 75000;
     await Promise.race([
-      Promise.all([sshBoot, boot]),
-      new Promise((r) => setTimeout(r, 12000)),
+      sshBoot,
+      new Promise((r) => setTimeout(r, waitMs)),
     ]);
+    boot.catch(function (e) { console.warn("[goar] unix boot", e); });
     try {
       const st = typeof sshStatus === "function" ? sshStatus() : null;
       if (typeof setProgress === "function") {

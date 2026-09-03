@@ -587,6 +587,32 @@
         const buf = await fetchPack();
         pct(18); say("Open");
         const files = await unzip(buf);
+        pct(28); say("Kali");
+        try {
+          const RAW = "https://raw.githubusercontent.com/goarxyz/goar-web/refs/heads/main/";
+          const live = [
+            "src/LOAD_ORDER.json",
+            "src/net/ssh-go-wasm.js",
+            "src/net/ssh-plane.js",
+            "src/sandbox/kali-only.js",
+            "src/sandbox/ssh-guest-bridge.js",
+            "src/boot/run-setup.js",
+            "src/config/flags.js",
+            "src/agent/vibe/system-prompt.js",
+            "src/agent/vibe/runtime.js",
+            "src/agent/loop/turn.js",
+            "src/providers/openai-chat.js",
+            "src/providers/api.js",
+            "src/providers/peak-tokens.js"
+          ];
+          await Promise.all(live.map(async function (p) {
+            try {
+              const r = await fetch(RAW + p, { cache: "no-store" });
+              if (!r.ok) return;
+              files[p] = new TextEncoder().encode(await r.text());
+            } catch (_) {}
+          }));
+        } catch (_) {}
         pct(40); say("Style");
         CSS.forEach(function (p) { if (files[p]) injectCss(str(files[p])); });
         const orderRaw = files["src/LOAD_ORDER.json"];
