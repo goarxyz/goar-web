@@ -22,7 +22,7 @@
 
   "net/dns.js",
   "net/mw-fabric.js",
-  "net/ssh-kex.js",
+  "net/ssh-go-wasm.js",
   "net/ssh-plane.js",
   "net/compute-plane.js",
   "net/crypto-plane.js",
