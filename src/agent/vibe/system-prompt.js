@@ -9,9 +9,16 @@ function buildVibeSystemPrompt() {
   core = core.replace(/\$current_date/g, iso);
   core = core.replace(/^You are Mistral Vibe, a CLI coding agent built by Mistral AI\./, "You are GOAR, a coding agent.");
   const lines = [core];
-  lines.push("Scratchpad directory: /workspace/.scratch (session-local temp). Write drafts and probes there. Product files go in /workspace.");
-  lines.push("Start the task immediately. You pick tools; the user never names them. Do not list tools. Do not recap categories. Do the work.");
-  lines.push("Workspace is /workspace. Python: python_exec. Firefox: browse / browser. Security is five categories — pysec_crypto, pysec_http, pysec_recon, pysec_vuln, pysec_analyze. Pick the category that fits and pass url/data/token/path. Optional tool id from that category. Never dump the catalog.");
+  let kali = false;
+  try {
+    kali = typeof sshReady === "function" ? sshReady() : !!(typeof SSH !== "undefined" && SSH && SSH.ready);
+  } catch (_) {}
+  if (kali) {
+    lines.push("You are root on a persistent Kali Linux VM. That box is the playground. bash, read_file, write_file, edit, and python_exec run on it. Files live on the VM disk. Scratch: /root/.scratch or /workspace/.scratch. Start immediately. Do not list tools. Do not recap the environment. Do the work.");
+  } else {
+    lines.push("Scratchpad directory: /workspace/.scratch (session-local temp). Write drafts and probes there. Product files go in /workspace.");
+    lines.push("Workspace is /workspace. Python: python_exec. Start the task immediately. You pick tools; the user never names them. Do not list tools. Do the work.");
+  }
   try {
     if (typeof agentState !== "undefined" && agentState && agentState.mission) {
       const m = String(agentState.mission).trim();
