@@ -3,28 +3,50 @@ async function runSetup() {
   try {
     if (typeof WebAssembly === "undefined" || typeof WebAssembly.instantiate !== "function") {
       throw new Error(
-        "This browser has no WebAssembly API (needed for Pyodide and the Unix plane). " +
+        "This browser has no WebAssembly API (needed for the workspace planes). " +
         "Use a current Chrome / Edge / Firefox / Safari."
       );
     }
     initTerm();
     try { if (typeof startHeavyWarm === "function") startHeavyWarm(); } catch (_) {}
+    try { if (typeof ensureMwFabric === "function") ensureMwFabric(); } catch (_) {}
+    try {
+      if (typeof setProgress === "function") setProgress(35, "Kali", "Connecting persistent VM");
+    } catch (_) {}
+    const sshBoot = (typeof ensureSsh === "function")
+      ? ensureSsh({ reason: "boot" }).catch(function (e) {
+          console.warn("[goar] ssh boot", e);
+          return null;
+        })
+      : Promise.resolve(null);
     try { if (typeof startGeckoWarm === "function") startGeckoWarm(); } catch (_) {}
-    if (typeof bootWasmUnix !== "function") {
-      throw new Error("Unix plane failed to load.");
+    let boot = Promise.resolve();
+    if (typeof bootWasmUnix === "function") {
+      boot = bootWasmUnix();
     }
-    const boot = bootWasmUnix();
     await Promise.race([
-      boot,
-      new Promise((r) => setTimeout(r, 8000)),
+      Promise.all([sshBoot, boot]),
+      new Promise((r) => setTimeout(r, 12000)),
     ]);
-    try { if (typeof setProgress === "function") setProgress(100, "Ready", ""); } catch (_) {}
+    try {
+      const st = typeof sshStatus === "function" ? sshStatus() : null;
+      if (typeof setProgress === "function") {
+        setProgress(100, st && st.ready ? "Kali ready" : "Ready", st && st.banner ? st.banner : "");
+      }
+    } catch (_) {
+      try { if (typeof setProgress === "function") setProgress(100, "Ready", ""); } catch (__) {}
+    }
     try { if (typeof showCredPhase === "function") showCredPhase(); } catch (_) {}
     boot.then(() => {
       try {
         if (typeof preloadGoarPeak === "function") preloadGoarPeak();
       } catch (_) {}
     }).catch((e) => console.warn("[goar] boot", e));
+    sshBoot.then(function (st) {
+      if (st && st.ready) {
+        try { if (typeof __goarMarkEnvReady === "function") __goarMarkEnvReady(true, "ssh-boot"); } catch (_) {}
+      }
+    }).catch(function () {});
   } catch (e) {
     console.error(e);
     showErr((e && e.message) ? e.message : String(e));
@@ -59,6 +81,7 @@ el.btnClearCache?.addEventListener("click", async () => {
 el.btnClearAll?.addEventListener("click", async () => {
   try {
     localStorage.removeItem(LS_KEY);
+    try { localStorage.removeItem("goar_segfault_secret"); } catch (_) {}
     await caches.delete(CACHE_NAME);
     fillSettingsForm();
     await refreshCacheStats();
