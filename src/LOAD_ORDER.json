@@ -64,6 +64,7 @@
   "sandbox/guest-exec.js",
   "sandbox/guest-fs-tools.js",
   "sandbox/ssh-guest-bridge.js",
+  "sandbox/kali-only.js",
   "sandbox/boot-ready.js",
   "sandbox/preload-peak.js",
 
