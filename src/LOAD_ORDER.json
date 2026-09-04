@@ -74,8 +74,6 @@
   "agent/vibe/sessions.js",
   "agent/vibe/scratchpad.js",
   "agent/vibe/system-prompt.js",
-  "vendor/openai-agents-core.js",
-  "agent/loop/sdk-bind.js",
   "agent/loop/turn.js",
   "vibe/prompts.js",
   "vibe/runtime.js",

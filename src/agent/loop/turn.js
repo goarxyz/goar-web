@@ -85,24 +85,6 @@ async function agentTurn(userText) {
 
     let finishedClean = false;
 
-    if (typeof goarSdkRun === "function" && window.GOAR_SDK_RUNNER === true) {
-      setRunningUI(true, "thinking");
-      try { if (typeof setStatusFooter === "function") setStatusFooter("working..."); } catch (_) {}
-      const sdk = await goarSdkRun({
-        userText: userText,
-        signal: agentAbortController.signal,
-        refreshSystem: refreshSystem,
-        onUsage: function (u) { lastUsage = u; },
-        onTool: function () { toolCount++; },
-        onStep: function (n) { step = n; },
-      });
-      if (sdk) {
-        toolCount = sdk.toolCount || toolCount;
-        step = sdk.turns || step;
-        lastUsage = sdk.usage || lastUsage;
-        finishedClean = !sdk.aborted;
-      }
-    } else {
     step = -1;
     while (!agentAbort || (typeof drainSteers === "function" && (window.__GOAR_STEER || []).length)) {
       step++;
@@ -445,7 +427,6 @@ async function agentTurn(userText) {
       finishedClean = true;
       break;
     }
-    } // else: legacy vibe loop
 
     // Hit max waves with tools still open: one text wrap-up that keeps mission, not a hard amnesia
     if (!finishedClean && !agentAbort) {
