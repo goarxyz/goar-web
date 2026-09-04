@@ -43,16 +43,6 @@ async function agentTurn(userText) {
     if (typeof pinMission === "function") pinMission(userText);
     if (typeof agentState !== "undefined") agentState.wave = 0;
 
-    if (!window.GOAR_KALI_ONLY) {
-      try { await loadPysecCatalog(); } catch (_) {}
-      try {
-        if (typeof ensureSystemPlanes === "function") await ensureSystemPlanes();
-        else {
-          if (typeof ensurePysecWorker === "function") await ensurePysecWorker();
-          if (typeof ensurePysecNetwork === "function") await ensurePysecNetwork();
-        }
-      } catch (_) {}
-    }
     try { refreshAgentTools(); } catch (_) {}
 
     const hasFullCatalog =

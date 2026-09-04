@@ -94,6 +94,44 @@
     return out;
   }
 
+  function historyToInput(history) {
+    const items = [];
+    const list = Array.isArray(history) ? history : [];
+    for (let i = 0; i < list.length; i++) {
+      const m = list[i];
+      if (!m || m.role === "system") continue;
+      if (m.role === "user") {
+        items.push({ type: "message", role: "user", content: String(m.content || "") });
+        continue;
+      }
+      if (m.role === "assistant") {
+        const calls = Array.isArray(m.tool_calls) ? m.tool_calls : [];
+        for (let c = 0; c < calls.length; c++) {
+          const tc = calls[c] || {};
+          const fn = tc.function || {};
+          items.push({
+            type: "function_call",
+            callId: String(tc.id || "call_" + i + "_" + c),
+            name: String(fn.name || ""),
+            arguments: typeof fn.arguments === "string" ? fn.arguments : JSON.stringify(fn.arguments || {}),
+          });
+        }
+        const text = textOfContent(m.content);
+        if (text) items.push({ type: "message", role: "assistant", content: text });
+        continue;
+      }
+      if (m.role === "tool") {
+        items.push({
+          type: "function_call_result",
+          callId: String(m.tool_call_id || m.callId || ""),
+          name: String(m.name || ""),
+          output: String(m.content || ""),
+        });
+      }
+    }
+    return items;
+  }
+
   function GoarChatModel() {}
   GoarChatModel.prototype.getResponse = async function (request) {
     const S = sdk();
@@ -248,6 +286,7 @@
       throw new Error("OpenAI Agents core not loaded");
     }
     const userText = String(opts.userText || "");
+    try { if (typeof opts.refreshSystem === "function") opts.refreshSystem(); } catch (_) {}
     const instructions =
       (typeof buildVibeSystemPrompt === "function" && buildVibeSystemPrompt()) ||
       (typeof OPERATOR_CORE === "string" && OPERATOR_CORE) ||
@@ -289,7 +328,14 @@
       if (typeof prevOn === "function") prevOn(name);
       if (typeof opts.onStep === "function") opts.onStep(toolCount);
     };
-    const result = await runner.run(agent, userText, {
+    const result = await runner.run(agent, (function () {
+      let input = [];
+      try {
+        input = historyToInput(typeof agentHistory !== "undefined" ? agentHistory : []);
+      } catch (_) { input = []; }
+      if (!input.length && userText) return userText;
+      return input.length ? input : userText;
+    })(), {
       maxTurns: maxTurns,
       signal: opts.signal,
       stream: false,

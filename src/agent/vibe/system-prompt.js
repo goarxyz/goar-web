@@ -1,21 +1,28 @@
 function buildVibeSystemPrompt() {
   let core = "";
   try {
-    if (typeof VIBE_PROMPTS !== "undefined" && VIBE_PROMPTS && VIBE_PROMPTS.cli) core = VIBE_PROMPTS.cli;
+    if (typeof OPERATOR_CORE === "string") core = OPERATOR_CORE;
   } catch (_) {}
-  if (!core && typeof OPERATOR_CORE === "string") core = OPERATOR_CORE;
   core = String(core || "").trim();
   const iso = new Date().toISOString().slice(0, 10);
   core = core.replace(/\$current_date/g, iso);
-  core = core.replace(/^You are Mistral Vibe, a CLI coding agent built by Mistral AI\./, "You are GOAR, a coding agent.");
   const lines = [core];
   let kali = false;
+  let host = "segfault.net";
   try {
     kali = typeof sshReady === "function" ? sshReady() : !!(typeof SSH !== "undefined" && SSH && SSH.ready);
+    if (typeof resolveSshTarget === "function") host = (resolveSshTarget() || {}).host || host;
   } catch (_) {}
-  lines.push("Workspace is the live Kali Linux SSH instance on segfault.net. You are root on that VM. bash, read_file, write_file, edit, and python_exec run on the Kali PTY. Durable files: /sec/workspace (also /workspace). Scratch: /root/.scratch. Pyodide/pysec are not the workspace. Do not list tools. Do not recap the environment. Do the work.");
+  lines.push(
+    "Workspace is the live Kali Linux SSH box (" + host + "), root. Same PTY — cwd and env persist. " +
+    "The whole userland is yours: python3, git, curl, compilers, pip, apt, nmap, whatever is installed. " +
+    "Discover with which / type / apt-cache / pip show. Install what you need. " +
+    "Durable files: /sec/workspace (also /workspace). Scratch: /root/.scratch. " +
+    "Pysec and playbooks are gone — use bash and the file tools instead. " +
+    "Do the work. Do not list tools. Do not recap the environment. Read before you edit. Prove it works."
+  );
   if (!kali) {
-    lines.push("Kali SSH is still connecting this browser session. Call bash/write/read/python anyway — tools bring the VM up. Do not fall back to describing a local sandbox.");
+    lines.push("Kali SSH is still connecting. Call bash/write/read/python anyway — tools bring the VM up. Do not invent a local sandbox.");
   }
   try {
     if (typeof agentState !== "undefined" && agentState && agentState.mission) {

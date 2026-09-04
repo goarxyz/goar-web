@@ -1127,3 +1127,4 @@ html body.view-files #ide-shell.open {
 #ide-editor-wrap { position: relative; }
 #monaco-box { position: absolute; inset: 0; }
 #ide-shell.vscode-on #ide-editor { display: none !important; }
+#kit-tab, .rail-btn[data-view="kit"], .menu-item[data-view="kit"] { display: none !important; }

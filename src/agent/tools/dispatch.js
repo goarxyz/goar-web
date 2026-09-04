@@ -41,24 +41,27 @@ async function runAgentTool(name, args) {
     }
   }
 
-  // Legacy p_* first-class pysec names (if model still emits them)
+  if (typeof name === "string" && (name === "pysec" || name.indexOf("pysec_") === 0 || name === "playbook" || name === "audit" || name === "micropip_install" || name === "install_flask" || name === "kit_status")) {
+    return "removed: use bash / python_exec / read_file / write_file on Kali. Pysec and playbooks are gone.";
+  }
   if (typeof name === "string" && PYSEC_FN_TO_ID && PYSEC_FN_TO_ID[name]) {
-    return await toolPysec({ tool_id: PYSEC_FN_TO_ID[name], kwargs: args || {} });
+    return "removed: use bash on Kali.";
   }
   if (typeof name === "string" && name.indexOf(".") !== -1 && typeof toolPysec === "function") {
-    return await toolPysec({ tool_id: name, kwargs: args || {} });
+    return "removed: use bash on Kali.";
   }
 
   switch (name) {
     case "bash": return toolBash(args);
     case "audit":
-      return typeof toolPlaybook === "function"
-        ? toolPlaybook(Object.assign({}, args || {}, { playbook: "audit" }))
-        : JSON.stringify({ ok: false, error: "playbooks not ready" });
     case "playbook":
-      return typeof toolPlaybook === "function"
-        ? toolPlaybook(args)
-        : JSON.stringify({ ok: false, error: "playbooks not ready" });
+      return "removed: use bash on Kali. Playbooks are gone.";
+    case "pysec":
+      return "removed: use bash on Kali. Pysec is gone.";
+    case "install_flask":
+    case "micropip_install":
+    case "kit_status":
+      return "removed: pip install on Kali via bash.";
     case "task":
     case "agent_run": {
       if (typeof wasmAgentRun === "function") {
@@ -140,13 +143,7 @@ async function runAgentTool(name, args) {
     }
     case "http_request": return toolHttp(args);
     case "env_info": return toolEnvInfo(args);
-    case "install_flask": {
-      const r = await installOfflineFlask();
-      return JSON.stringify(r);
-    }
-    case "pysec": return toolPysec(args);
-    case "guest_http": return toolGuestHttp(args);
-    case "kit_status": return toolKitStatus(args);
+    case "guest_http": return typeof toolGuestHttp === "function" ? toolGuestHttp(args) : "error: guest_http missing";
     case "workspace_tree": return toolWorkspaceTree(args);
     case "scratch": return typeof toolScratch === "function" ? toolScratch(args) : "error: scratch missing";
     case "py_check": return toolPyCheck(args);

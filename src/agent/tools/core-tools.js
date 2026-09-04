@@ -369,7 +369,7 @@ function rebuildPysecFnMaps() {
 const GOAR_API_TOOLS = [
   { type: "function", function: {
     name: "bash",
-    description: "Execute a shell command and return its output.\n\n- Prefer absolute paths. Shell state — working directory, environment variables, functions — does NOT persist between calls; each call starts a fresh shell.\n- Prefer dedicated tools over shell utilities: read_file instead of cat/head/tail, grep instead of grep/sed/awk, edit/write_file instead of sed/echo redirects.\n- timeout is in seconds (default 300). Avoid launching long-running or blocking processes.",
+    description: "Run any command on the live Kali Linux VM (same PTY — cwd and env persist). Root. The whole box is available: python3, git, curl, nmap, compilers, pip, apt, whatever is installed. Discover with which/type/apt-cache. Install what you need. Prefer dedicated file tools for read/edit of project files; use bash for everything else.",
     parameters: { type: "object", properties: {
       command: { type: "string", description: "The shell command to execute" },
       timeout: { type: "number", description: "Override the default command timeout." }
@@ -386,7 +386,7 @@ const GOAR_API_TOOLS = [
   }},
   { type: "function", function: {
     name: "write_file",
-    description: "Create a new file. Errors if the file already exists — use edit to modify existing files. Prefer editing existing files over creating new ones. Do not proactively create documentation or README files.",
+    description: "Write a complete UTF-8 file on Kali (create or replace). Prefer /sec/workspace/… or /workspace/….",
     parameters: { type: "object", properties: {
       file_path: { type: "string", description: "The absolute path to the file to write (must be absolute, not relative)" },
       content: { type: "string", description: "The content to write to the file" }
@@ -465,63 +465,69 @@ const GOAR_API_TOOLS = [
     }, required: ["action"] }
   }},
   { type: "function", function: {
-    name: "pysec_crypto",
-    description: "Crypto category: hashes, JWT, secrets, OTP, ciphers. Pass data/token. Optional tool id from this category.",
+    name: "glob",
+    description: "Find files by glob under a root on Kali. Default root /sec/workspace.",
     parameters: { type: "object", properties: {
-      tool: { type: "string" },
-      data: { type: "string" }, text: { type: "string" }, token: { type: "string" },
-      algorithm: { type: "string" }, format: { type: "string" }
-    } }
+      pattern: { type: "string" },
+      root: { type: "string" }
+    }, required: ["pattern"] }
   }},
   { type: "function", function: {
-    name: "pysec_http",
-    description: "HTTP category: fetch, probe, request, repeater. Pass url. Optional tool id from this category.",
-    parameters: { type: "object", properties: {
-      tool: { type: "string" },
-      url: { type: "string" }, method: { type: "string" }, body: { type: "string" }, headers: { type: "string" }
-    } }
+    name: "list_dir",
+    description: "List a directory on Kali (ls -la). Default /sec/workspace.",
+    parameters: { type: "object", properties: { path: { type: "string" } } }
   }},
   { type: "function", function: {
-    name: "pysec_recon",
-    description: "Recon category: DNS, subdomains, fingerprint, archives. Pass domain or url. Optional tool id from this category.",
+    name: "web_search",
+    description: "Search the public web. Returns titles, URLs, snippets. Use before guessing at APIs or errors.",
     parameters: { type: "object", properties: {
-      tool: { type: "string" },
-      domain: { type: "string" }, host: { type: "string" }, url: { type: "string" }
-    } }
+      query: { type: "string" },
+      max_results: { type: "number" }
+    }, required: ["query"] }
   }},
   { type: "function", function: {
-    name: "pysec_vuln",
-    description: "Vuln category: sqlmap, xss, nuclei, cors, nmap http. Pass url. Optional tool id from this category.",
-    parameters: { type: "object", properties: {
-      tool: { type: "string" },
-      url: { type: "string" }, target: { type: "string" }
-    } }
+    name: "env_info",
+    description: "Live Kali inventory: SSH status, uname, which python3/git/curl/nmap/node, workspace listing. Call to discover what is on the box.",
+    parameters: { type: "object", properties: {} }
   }},
   { type: "function", function: {
-    name: "pysec_analyze",
-    description: "Analyze category: sast, yara, url, headers. Pass path, data, or url. Optional tool id from this category.",
-    parameters: { type: "object", properties: {
-      tool: { type: "string" },
-      path: { type: "string" }, data: { type: "string" }, text: { type: "string" }, url: { type: "string" }
-    } }
+    name: "delete_file",
+    description: "Delete a file or directory on Kali (rm -rf).",
+    parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] }
+  }},
+  { type: "function", function: {
+    name: "mkdir",
+    description: "Create a directory tree on Kali (mkdir -p).",
+    parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] }
+  }},
+  { type: "function", function: {
+    name: "move_file",
+    description: "Move or rename on Kali.",
+    parameters: { type: "object", properties: { src: { type: "string" }, dest: { type: "string" } }, required: ["src", "dest"] }
+  }},
+  { type: "function", function: {
+    name: "copy_file",
+    description: "Copy a file or directory on Kali (cp -a).",
+    parameters: { type: "object", properties: { src: { type: "string" }, dest: { type: "string" } }, required: ["src", "dest"] }
   }}
 ];
 
 function buildFullAgentTools() {
-  rebuildPysecFnMaps();
+  try { if (typeof rebuildPysecFnMaps === "function") rebuildPysecFnMaps(); } catch (_) {}
   const api = Array.isArray(GOAR_API_TOOLS) ? GOAR_API_TOOLS.slice() : [];
   let dyn = [];
   try {
     if (typeof buildDynamicAgentTools === "function") dyn = buildDynamicAgentTools() || [];
   } catch (_) {}
+  const skip = /^(pysec|playbook|audit|micropip_install|install_flask|kit_status)(_|$)/;
   const seen = new Set();
   const out = [];
   for (const t of api.concat(dyn)) {
     const n = t && t.function && t.function.name;
     if (!n || seen.has(n)) continue;
+    if (skip.test(n) || n.indexOf("pysec_") === 0) continue;
     seen.add(n);
     out.push(t);
-    if (out.length >= 32) break;
   }
   return out;
 }

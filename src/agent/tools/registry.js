@@ -3,7 +3,7 @@ function refreshAgentTools() {
     AGENT_TOOLS = buildFullAgentTools();
   } catch (e) {
     console.warn("[goar] buildFullAgentTools", e);
-    AGENT_TOOLS = typeof buildCategoryAgentTools === "function" ? buildCategoryAgentTools() : [];
+    AGENT_TOOLS = Array.isArray(GOAR_API_TOOLS) ? GOAR_API_TOOLS.slice() : [];
   }
   try {
     window.__GOAR_TOOL_COUNT = AGENT_TOOLS.length;
