@@ -7,14 +7,13 @@ function loadSettings() {
     if (!s.apiBase) s.apiBase = DEFAULTS.apiBase;
     if (s.apiModel == null || s.apiModel === "") s.apiModel = DEFAULTS.apiModel || "";
     if (!s.provider) s.provider = detectProvider(s.apiBase) || DEFAULTS.provider;
-    // First-run / empty-key users land on Free.ai so chat works with no key
+    // First-run only. Never steal a provider the user already picked.
     if (!(s.apiKey || "").trim()) {
       const p = typeof getProvider === "function" ? getProvider(s.provider) : null;
-      const needs = typeof providerNeedsKey === "function" ? providerNeedsKey(p) : (p && p.requiresApiKey);
-      if (!p || needs) {
+      if (!s.provider || !p) {
         s.provider = "duckai";
         s.apiBase = "https://duckduckgo.com/duckchat/v1";
-        if (!s.apiModel || s.apiModel === "qwen7b") s.apiModel = "gpt-5.4-mini";
+        if (!s.apiModel) s.apiModel = "gpt-5.4-mini";
       }
     }
     if (s.customDns == null) s.customDns = DEFAULTS.customDns || "";

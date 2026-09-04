@@ -184,6 +184,10 @@ async function openaiChat({ messages, tools, stream = false, includeTools = true
 async function fetchModels(override) {
   const s = Object.assign({}, settingsSnapshot(), override || {});
   const provider = s.provider || detectProvider(s.apiBase);
+  if (typeof isDuckProvider === "function" && isDuckProvider(provider, s.apiBase)) {
+    const p = typeof getProvider === "function" ? getProvider("duckai") : null;
+    return ((p && p.preferredModels) || (typeof DUCKAI_MODELS !== "undefined" ? DUCKAI_MODELS : [])).slice();
+  }
   if (typeof isLocalLlmProvider === "function" && isLocalLlmProvider(provider, s.apiBase)) {
     const data = localLlmModels();
     return (data.data || []).map(function (x) { return x.id; });

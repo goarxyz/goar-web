@@ -75,6 +75,9 @@ function normalizeApiBase(base, providerId) {
 
 function chatCompletionsUrl(base, providerId) {
   const b = normalizeApiBase(base, providerId);
+  if ((providerId === "duckai") || /duckduckgo\.com\/duckchat|duck\.ai/i.test(b)) {
+    return "https://duckduckgo.com/duckchat/v1/chat";
+  }
   if ((providerId === "freeai") || /api\.free\.ai/i.test(b)) {
     if (/\/v1\/chat\/?$/i.test(b)) return b.replace(/\/?$/, "/");
     return (b.replace(/\/v1$/i, "") + "/v1/chat/").replace(/([^:]\/)\/+/g, "$1");

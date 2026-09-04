@@ -85,7 +85,7 @@ async function agentTurn(userText) {
 
     let finishedClean = false;
 
-    if (typeof goarSdkRun === "function" && window.GOAR_SDK_RUNNER !== false) {
+    if (typeof goarSdkRun === "function" && window.GOAR_SDK_RUNNER === true) {
       setRunningUI(true, "thinking");
       try { if (typeof setStatusFooter === "function") setStatusFooter("working..."); } catch (_) {}
       const sdk = await goarSdkRun({

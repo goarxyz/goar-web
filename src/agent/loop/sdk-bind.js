@@ -362,6 +362,6 @@
   try {
     global.GoarChatModel = GoarChatModel;
     global.goarSdkRun = goarSdkRun;
-    global.GOAR_SDK_RUNNER = global.GOAR_SDK_RUNNER !== false;
+    global.GOAR_SDK_RUNNER = global.GOAR_SDK_RUNNER === true;
   } catch (_) {}
 })(typeof window !== "undefined" ? window : globalThis);

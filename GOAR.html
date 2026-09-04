@@ -9900,7 +9900,7 @@ window.GOAR_MAX_TOKENS = 8192;
 window.GOAR_PARALLEL_TOOLS = true;
 window.GOAR_SSH_BOOT_MS = 75000;
 window.GOAR_SKIP_WASM_UNIX = true;
-window.GOAR_SDK_RUNNER = true;
+window.GOAR_SDK_RUNNER = false;
 </script>
 
 <!-- ====================================================================== -->
@@ -10372,6 +10372,9 @@ function normalizeApiBase(base, providerId) {
 
 function chatCompletionsUrl(base, providerId) {
   const b = normalizeApiBase(base, providerId);
+  if ((providerId === "duckai") || /duckduckgo\.com\/duckchat|duck\.ai/i.test(b)) {
+    return "https://duckduckgo.com/duckchat/v1/chat";
+  }
   if ((providerId === "freeai") || /api\.free\.ai/i.test(b)) {
     if (/\/v1\/chat\/?$/i.test(b)) return b.replace(/\/?$/, "/");
     return (b.replace(/\/v1$/i, "") + "/v1/chat/").replace(/([^:]\/)\/+/g, "$1");
@@ -10549,14 +10552,13 @@ function loadSettings() {
     if (!s.apiBase) s.apiBase = DEFAULTS.apiBase;
     if (s.apiModel == null || s.apiModel === "") s.apiModel = DEFAULTS.apiModel || "";
     if (!s.provider) s.provider = detectProvider(s.apiBase) || DEFAULTS.provider;
-    // First-run / empty-key users land on Free.ai so chat works with no key
+    // First-run only. Never steal a provider the user already picked.
     if (!(s.apiKey || "").trim()) {
       const p = typeof getProvider === "function" ? getProvider(s.provider) : null;
-      const needs = typeof providerNeedsKey === "function" ? providerNeedsKey(p) : (p && p.requiresApiKey);
-      if (!p || needs) {
+      if (!s.provider || !p) {
         s.provider = "duckai";
         s.apiBase = "https://duckduckgo.com/duckchat/v1";
-        if (!s.apiModel || s.apiModel === "qwen7b") s.apiModel = "gpt-5.4-mini";
+        if (!s.apiModel) s.apiModel = "gpt-5.4-mini";
       }
     }
     if (s.customDns == null) s.customDns = DEFAULTS.customDns || "";
@@ -11349,6 +11351,10 @@ async function openaiChat({ messages, tools, stream = false, includeTools = true
 async function fetchModels(override) {
   const s = Object.assign({}, settingsSnapshot(), override || {});
   const provider = s.provider || detectProvider(s.apiBase);
+  if (typeof isDuckProvider === "function" && isDuckProvider(provider, s.apiBase)) {
+    const p = typeof getProvider === "function" ? getProvider("duckai") : null;
+    return ((p && p.preferredModels) || (typeof DUCKAI_MODELS !== "undefined" ? DUCKAI_MODELS : [])).slice();
+  }
   if (typeof isLocalLlmProvider === "function" && isLocalLlmProvider(provider, s.apiBase)) {
     const data = localLlmModels();
     return (data.data || []).map(function (x) { return x.id; });
@@ -31221,7 +31227,7 @@ A skill is a set of local instructions to follow that is stored in a \`SKILL.md\
   try {
     global.GoarChatModel = GoarChatModel;
     global.goarSdkRun = goarSdkRun;
-    global.GOAR_SDK_RUNNER = global.GOAR_SDK_RUNNER !== false;
+    global.GOAR_SDK_RUNNER = global.GOAR_SDK_RUNNER === true;
   } catch (_) {}
 })(typeof window !== "undefined" ? window : globalThis);
 </script>
@@ -31318,7 +31324,7 @@ async function agentTurn(userText) {
 
     let finishedClean = false;
 
-    if (typeof goarSdkRun === "function" && window.GOAR_SDK_RUNNER !== false) {
+    if (typeof goarSdkRun === "function" && window.GOAR_SDK_RUNNER === true) {
       setRunningUI(true, "thinking");
       try { if (typeof setStatusFooter === "function") setStatusFooter("working..."); } catch (_) {}
       const sdk = await goarSdkRun({
