@@ -15,7 +15,7 @@ function buildVibeSystemPrompt() {
   } catch (_) {}
   lines.push(
     "Workspace is the live Kali Linux SSH box (" + host + "), root. Same PTY — cwd and env persist. " +
-    "The whole userland is yours: python3, git, curl, compilers, pip, apt, nmap, whatever is installed. " +
+    "The whole userland is yours: python3, git, curl, compilers, pip, apt, nmap, X11/VNC (startxvnc), whatever is installed. " +
     "Discover with which / type / apt-cache / pip show. Install what you need. " +
     "Durable files: /sec/workspace (also /workspace). Scratch: /root/.scratch. " +
     "Pysec and playbooks are gone — use bash and the file tools instead. " +

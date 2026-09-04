@@ -509,6 +509,11 @@ const GOAR_API_TOOLS = [
     name: "copy_file",
     description: "Copy a file or directory on Kali (cp -a).",
     parameters: { type: "object", properties: { src: { type: "string" }, dest: { type: "string" } }, required: ["src", "dest"] }
+  }},
+  { type: "function", function: {
+    name: "desktop",
+    description: "Open the Kali graphical desktop (THC startxvnc) in the in-app VNC window. Same live VM. action=open|reconnect|status.",
+    parameters: { type: "object", properties: { action: { type: "string" } } }
   }}
 ];
 

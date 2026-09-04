@@ -98,11 +98,12 @@
 
   function goarShowView(view) {
     if (view === "files" || view === "workspace") view = "ide";
-    document.body.classList.remove("split-computer", "files-only", "files-ide", "view-computer", "view-files", "view-term", "view-kit");
+    document.body.classList.remove("split-computer", "files-only", "files-ide", "view-computer", "view-files", "view-term", "view-kit", "view-vnc");
     $("browser-tab")?.classList.remove("open", "view-active", "active");
     $("files-sheet-overlay")?.classList.remove("open", "view-active", "active");
     $("ide-shell")?.classList.remove("open", "view-active", "active");
     $("term-tab")?.classList.remove("open", "view-active", "active");
+    $("vnc-tab")?.classList.remove("open", "view-active", "active");
     $("kit-tab")?.classList.remove("open", "view-active", "active");
     $("view-skills")?.classList.remove("active");
     $("chat")?.classList.remove("active");
@@ -113,7 +114,7 @@
       b.classList.toggle("active", b.getAttribute("data-view") === view);
     });
     const lab = $("hdr-view-label");
-    const labels = { chat: "Chat", computer: "Computer", ide: "Files", skills: "Skills", kit: "Toolkit" };
+    const labels = { chat: "Chat", computer: "Computer", ide: "Files", skills: "Skills", kit: "Toolkit", vnc: "Desktop", term: "Terminal" };
     if (lab) lab.textContent = labels[view] || view;
 
     if (view === "chat") {
@@ -142,6 +143,19 @@
           if (typeof fitAddon !== "undefined" && fitAddon && fitAddon.fit) fitAddon.fit();
           if (typeof term !== "undefined" && term && term.focus) term.focus();
         } catch (_) {}
+      }
+    } else if (view === "vnc") {
+      document.body.classList.add("view-vnc");
+      const tab = $("vnc-tab");
+      if (tab) {
+        tab.classList.add("open", "view-active", "active");
+        tab.setAttribute("aria-hidden", "false");
+      }
+      if (typeof ensureVnc === "function") {
+        ensureVnc({}).catch(function (e) {
+          const st = $("vnc-status");
+          if (st) st.textContent = String(e && e.message ? e.message : e).slice(0, 80);
+        });
       }
     } else if (view === "ide") {
       document.body.classList.add("view-files", "files-ide");
@@ -675,6 +689,9 @@
 
     $("browser-close")?.addEventListener("click", () => goarShowView("chat"));
     $("computer-reload-vnc")?.addEventListener("click", openComputer);
+    $("vnc-reload")?.addEventListener("click", () => {
+      if (typeof ensureVnc === "function") ensureVnc({ force: true }).catch(function () {});
+    });
     $("browser-go")?.addEventListener("click", computerGo);
     $("browser-url-form")?.addEventListener("submit", (e) => { e.preventDefault(); computerGo(); });
     $("browser-reload")?.addEventListener("click", () => {

@@ -22,6 +22,7 @@
   "net/ssh-go-wasm.js",
   "net/ssh-plane.js",
   "net/ssh-files.js",
+  "net/vnc-plane.js",
   "net/compute-plane.js",
   "net/crypto-plane.js",
   "net/wasm-plane.js",

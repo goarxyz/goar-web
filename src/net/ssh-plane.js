@@ -735,6 +735,11 @@
     }
   }
 
+  function sshOpenTcp(host, port) {
+    if (!SSH.mux || typeof SSH.mux.openTcp !== "function") throw new Error("WISP mux down");
+    return SSH.mux.openTcp(host, port);
+  }
+
   try {
     global.SSH = SSH;
     global.ensureSsh = ensureSsh;
@@ -743,6 +748,7 @@
     global.sshStatus = sshStatus;
     global.sshWrite = sshWrite;
     global.resolveSshTarget = resolveSshTarget;
+    global.sshOpenTcp = sshOpenTcp;
     global.__GOAR_SSH = SSH;
     global.__GOAR_ENSURE_SSH = ensureSsh;
   } catch (_) {}

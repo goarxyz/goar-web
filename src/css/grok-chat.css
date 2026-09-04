@@ -705,6 +705,28 @@ html body.view-term #term-tab.open { display: flex !important; flex-direction: c
 #term-stage .xterm, #term-stage .xterm-viewport, #term-stage .xterm-screen {
   width: 100% !important;
   height: 100% !important;
+}
+
+#vnc-tab { display: none; position: fixed; top: 0 !important; right: 0; bottom: 0; left: var(--rail-w, 56px) !important; z-index: 4 !important; background: #0a0a0a !important; flex-direction: column; }
+html body:not(.view-vnc) #vnc-tab,
+html body:not(.view-vnc) #vnc-tab.open { display: none !important; }
+html body.view-vnc #vnc-tab,
+html body.view-vnc #vnc-tab.open { display: flex !important; pointer-events: auto !important; opacity: 1 !important; }
+.vnc-chrome {
+  display: flex; align-items: center; gap: 12px;
+  height: 40px; padding: 0 14px; flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  background: #111;
+  color: #cfcfd8; font-size: 12px;
+}
+.vnc-title { font-weight: 600; letter-spacing: .08em; text-transform: uppercase; font-size: 11px; color: #eee; }
+#vnc-status { flex: 1; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#vnc-reload {
+  background: #1a1a1a; border: 1px solid rgba(255,255,255,.12);
+  color: #eee; border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 11px;
+}
+#vnc-screen { flex: 1; min-height: 0; width: 100%; position: relative; background: #000; }
+#vnc-screen canvas, #vnc-screen > div { width: 100% !important; height: 100% !important; }
   pointer-events: auto !important;
 }
 #term-stage .xterm-helper-textarea {

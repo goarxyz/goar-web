@@ -136,13 +136,15 @@
       plain += s;
       if (plain.length > 240000) plain = plain.slice(-160000);
       captureSecret(s);
-      try {
-        if (global.SSH) {
-          global.SSH.buf = (global.SSH.buf || "") + s;
-          if (global.SSH.buf.length > 240000) global.SSH.buf = global.SSH.buf.slice(-160000);
-        }
-      } catch (_) {}
-      try { if (typeof term !== "undefined" && term && term.write) term.write(s.replace(/\n/g, "\r\n")); } catch (_) {}
+      if (!ctx.quiet) {
+        try {
+          if (global.SSH) {
+            global.SSH.buf = (global.SSH.buf || "") + s;
+            if (global.SSH.buf.length > 240000) global.SSH.buf = global.SSH.buf.slice(-160000);
+          }
+        } catch (_) {}
+      }
+      try { if (!ctx.quiet && typeof term !== "undefined" && term && term.write) term.write(s.replace(/\n/g, "\r\n")); } catch (_) {}
     }
     const prevOnData = sock.ondata;
     sock.ondata = function (chunk) {

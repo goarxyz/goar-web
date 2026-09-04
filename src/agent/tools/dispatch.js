@@ -115,6 +115,22 @@ async function runAgentTool(name, args) {
       } catch (_) {}
       return out;
     }
+    case "desktop":
+    case "vnc": {
+      const act = String((args && (args.action || args.op)) || "open").toLowerCase();
+      try { if (typeof goarShowView === "function" && act !== "status") goarShowView("vnc"); } catch (_) {}
+      if (act === "status") {
+        const st = typeof vncStatus === "function" ? vncStatus() : {};
+        return JSON.stringify(st);
+      }
+      if (typeof ensureVnc !== "function") return "error: desktop plane missing";
+      try {
+        const r = await ensureVnc({ force: act === "reconnect" });
+        return JSON.stringify({ ok: !!(r && r.ready), via: "startxvnc" });
+      } catch (e) {
+        return "error: " + (e && e.message ? e.message : e);
+      }
+    }
     case "browse": {
       const url = args && args.url;
       if (!url) return JSON.stringify({ ok: false, error: "url required" });
