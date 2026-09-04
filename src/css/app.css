@@ -1,7 +1,7 @@
 /* GOAR boot + settings */
 :root{--muted:#666;--g-bg:#000;--g-fg:#e8e8e8;--g-line:#1a1a1a;--g-font:ui-monospace,Menlo,Consolas,monospace}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:#1a1b1e;color:#ececec;font:14px/1.45 Inter,system-ui,sans-serif}
+html,body{margin:0;height:100%;background:#000;color:#f2f2f2;font:14px/1.45 Inter,system-ui,sans-serif}
 #setup{position:relative;z-index:1;min-height:100dvh;width:100vw;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:0;background:transparent}
 #setup.hide{display:none}
 #setup .logo{display:none!important}
@@ -16,11 +16,11 @@ html,body{margin:0;height:100%;background:#1a1b1e;color:#ececec;font:14px/1.45 I
 #bootList{list-style:none;margin:12px 0 0;padding:0;width:min(240px,70vw)}
 #bootList li{display:flex;align-items:center;gap:8px;font:11px var(--g-font);color:#666;padding:4px 0}
 #bootList .dot{width:6px;height:6px;border-radius:50%;background:#333}
-#bootList li[data-state="on"] .dot,#bootList li[data-state="ok"] .dot{background:#3dd68c}
+#bootList li[data-state="on"] .dot,#bootList li[data-state="ok"] .dot{background:#f2f2f2}
 #bootList li[data-state="run"] .dot{background:#e11d2e}
 #bootList .lab{flex:1}
 #bootList .st{color:#444}
-#bootList li[data-state="ok"] .st,#bootList li[data-state="on"] .st{color:#3dd68c}
+#bootList li[data-state="ok"] .st,#bootList li[data-state="on"] .st{color:#ccc}
 #err{color:#ff5555;font:12px var(--g-font);min-height:1.2em}
 #retry{display:none;margin-top:8px;padding:8px 14px;background:#111;border:1px solid #333;color:#ccc;border-radius:6px}
 #retry.show{display:inline-block}
@@ -34,7 +34,7 @@ html,body{margin:0;height:100%;background:#1a1b1e;color:#ececec;font:14px/1.45 I
 #credGo{margin-top:6px;padding:12px;background:#111;border:1px solid #333;color:#eee;border-radius:8px;font-weight:600;letter-spacing:.08em;cursor:pointer}
 #credGo:disabled{opacity:.4;cursor:not-allowed}
 #credStatus{font:11px var(--g-font);color:#666;min-height:1.2em}
-#credStatus.ok{color:#3dd68c}
+#credStatus.ok{color:#ccc}
 #credStatus.err{color:#ff5555}
 #credBaseWrap.auto-hidden label{color:#555}
 /* Design chrome owns #app layout; only gate visibility until boot */
@@ -43,7 +43,7 @@ html,body{margin:0;height:100%;background:#1a1b1e;color:#ececec;font:14px/1.45 I
 #settings{display:none;position:fixed;inset:0;z-index:10002;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:12px}
 #settings.open{display:flex}
 #settings .sheet{width:min(440px,100%);max-height:min(88dvh,640px);overflow:auto;background:#0a0a0a;border:1px solid #222;border-radius:16px 16px 12px 12px;padding:18px 16px 20px}
-#settings h2{margin:0 0 4px;font-size:15px;font-weight:600;letter-spacing:.06em;color:#ff1a1a}
+#settings h2{margin:0 0 4px;font-size:15px;font-weight:600;letter-spacing:.06em;color:#f2f2f2}
 #settings .sub{margin:0 0 16px;color:#666;font-size:12px;line-height:1.45}
 #settings .field{margin-bottom:12px}
 #settings label{display:block;font-size:11px;color:#888;margin-bottom:4px}

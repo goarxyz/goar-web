@@ -131,6 +131,11 @@ async function runAgentTool(name, args) {
         return "error: " + (e && e.message ? e.message : e);
       }
     }
+    case "generate_image":
+    case "imagine":
+      return typeof toolGenerateImage === "function"
+        ? toolGenerateImage(args)
+        : JSON.stringify({ ok: false, error: "pollinations missing" });
     case "browse": {
       const url = args && args.url;
       if (!url) return JSON.stringify({ ok: false, error: "url required" });

@@ -98,12 +98,13 @@
 
   function goarShowView(view) {
     if (view === "files" || view === "workspace") view = "ide";
-    document.body.classList.remove("split-computer", "files-only", "files-ide", "view-computer", "view-files", "view-term", "view-kit", "view-vnc");
+    document.body.classList.remove("split-computer", "files-only", "files-ide", "view-computer", "view-files", "view-term", "view-kit", "view-vnc", "view-creative");
     $("browser-tab")?.classList.remove("open", "view-active", "active");
     $("files-sheet-overlay")?.classList.remove("open", "view-active", "active");
     $("ide-shell")?.classList.remove("open", "view-active", "active");
     $("term-tab")?.classList.remove("open", "view-active", "active");
     $("vnc-tab")?.classList.remove("open", "view-active", "active");
+    $("creative-tab")?.classList.remove("open", "view-active", "active");
     $("kit-tab")?.classList.remove("open", "view-active", "active");
     $("view-skills")?.classList.remove("active");
     $("chat")?.classList.remove("active");
@@ -114,7 +115,7 @@
       b.classList.toggle("active", b.getAttribute("data-view") === view);
     });
     const lab = $("hdr-view-label");
-    const labels = { chat: "Chat", computer: "Computer", ide: "Files", skills: "Skills", kit: "Toolkit", vnc: "Desktop", term: "Terminal" };
+    const labels = { chat: "Chat", computer: "Computer", ide: "Files", skills: "Skills", kit: "Toolkit", vnc: "Desktop", term: "Terminal", creative: "Create" };
     if (lab) lab.textContent = labels[view] || view;
 
     if (view === "chat") {
@@ -157,6 +158,15 @@
           if (st) st.textContent = String(e && e.message ? e.message : e).slice(0, 80);
         });
       }
+    } else if (view === "creative") {
+      document.body.classList.add("view-creative");
+      const tab = $("creative-tab");
+      if (tab) {
+        tab.classList.add("open", "view-active", "active");
+        tab.setAttribute("aria-hidden", "false");
+      }
+      if (typeof wireCreative === "function") wireCreative();
+      if (typeof paintCreativeGallery === "function") paintCreativeGallery();
     } else if (view === "ide") {
       document.body.classList.add("view-files", "files-ide");
       $("files-sheet-overlay")?.classList.add("open", "view-active");

@@ -514,6 +514,20 @@ const GOAR_API_TOOLS = [
     name: "desktop",
     description: "Open the Kali graphical desktop (THC startxvnc) in the in-app VNC window. Same live VM. action=open|reconnect|status.",
     parameters: { type: "object", properties: { action: { type: "string" } } }
+  }},
+  { type: "function", function: {
+    name: "generate_image",
+    description: "Generate an image with Pollinations (no API key). Returns a CDN JPEG URL. model=flux|turbo|flux-realism. size=1:1|16:9|9:16|4:3 or width/height. save=true writes JPEG to Kali path.",
+    parameters: { type: "object", properties: {
+      prompt: { type: "string" },
+      model: { type: "string" },
+      size: { type: "string" },
+      width: { type: "number" },
+      height: { type: "number" },
+      seed: { type: "number" },
+      save: { type: "boolean" },
+      path: { type: "string" }
+    }, required: ["prompt"] }
   }}
 ];
 

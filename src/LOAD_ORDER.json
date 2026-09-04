@@ -23,6 +23,7 @@
   "net/ssh-plane.js",
   "net/ssh-files.js",
   "net/vnc-plane.js",
+  "net/pollinations-plane.js",
   "net/compute-plane.js",
   "net/crypto-plane.js",
   "net/wasm-plane.js",
