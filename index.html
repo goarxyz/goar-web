@@ -310,6 +310,34 @@
         <label for="apiModel">Model</label>
         <select id="apiModel"><option value="">Loading…</option></select>
       </div>
+      <h3 class="set-h">SSH instance</h3>
+      <p class="stat">Default is Kali at segfault.net. Point this at your own box — stored in this browser only.</p>
+      <div class="field">
+        <label for="sshHost">Host</label>
+        <input id="sshHost" type="text" autocomplete="off" spellcheck="false" placeholder="segfault.net">
+      </div>
+      <div class="field field-split">
+        <div>
+          <label for="sshPort">Port</label>
+          <input id="sshPort" type="number" min="1" max="65535" placeholder="443">
+        </div>
+        <div>
+          <label for="sshUser">User</label>
+          <input id="sshUser" type="text" autocomplete="off" spellcheck="false" placeholder="root">
+        </div>
+      </div>
+      <div class="field">
+        <label for="sshPassword">Password</label>
+        <input id="sshPassword" type="password" autocomplete="off" spellcheck="false" placeholder="segfault">
+      </div>
+      <div class="field">
+        <label for="sshSecret">Reconnect SECRET</label>
+        <input id="sshSecret" type="password" autocomplete="off" spellcheck="false" placeholder="auto-captured on Kali">
+      </div>
+      <div class="row-actions">
+        <button type="button" class="action" id="btnSshDefault">Kali default</button>
+        <button type="button" class="action" id="btnSshReconnect">Connect now</button>
+      </div>
       <div class="row-actions">
         <button type="button" class="action primary" id="btnSaveSettings">Save</button>
         <button type="button" class="action" id="btnCloseSettings">Close</button>
@@ -605,6 +633,7 @@
             "src/agent/loop/turn.js",
             "src/vendor/openai-agents-core.js",
             "src/providers/openai-chat.js",
+            "src/providers/settings.js",
             "src/providers/api.js",
             "src/providers/peak-tokens.js",
             "src/agent/tools/core-tools.js"

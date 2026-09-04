@@ -20,6 +20,13 @@ function loadSettings() {
     if (s.customDns == null) s.customDns = DEFAULTS.customDns || "";
     if (!s.wispUrl) s.wispUrl = (typeof window !== "undefined" && window.GOAR_WISP_URL) || DEFAULTS.wispUrl || "";
     if (!s.cdpUrl) s.cdpUrl = "http://127.0.0.1:9222";
+    if (!s.sshHost) s.sshHost = (DEFAULTS.sshHost || "segfault.net");
+    if (s.sshPort == null || s.sshPort === "") s.sshPort = DEFAULTS.sshPort || 443;
+    if (!s.sshUser) s.sshUser = DEFAULTS.sshUser || "root";
+    if (s.sshPassword == null) s.sshPassword = DEFAULTS.sshPassword || "segfault";
+    if (s.sshSecret == null || s.sshSecret === "") {
+      try { s.sshSecret = localStorage.getItem("goar_segfault_secret") || ""; } catch (_) { s.sshSecret = ""; }
+    }
     return s;
   } catch (_) {
     return { ...DEFAULTS };
@@ -41,7 +48,15 @@ function saveSettings(partial) {
   next.apiModel = (next.apiModel || "").trim();
   next.apiKey = (next.apiKey || "").trim();
   next.customDns = (next.customDns || "").trim();
+  next.sshHost = (next.sshHost || DEFAULTS.sshHost || "segfault.net").trim();
+  next.sshPort = Number(next.sshPort) || Number(DEFAULTS.sshPort) || 443;
+  next.sshUser = (next.sshUser || DEFAULTS.sshUser || "root").trim();
+  next.sshPassword = next.sshPassword == null ? (DEFAULTS.sshPassword || "") : String(next.sshPassword);
+  next.sshSecret = (next.sshSecret || "").trim();
   try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch (_) {}
+  try {
+    if (next.sshSecret) localStorage.setItem("goar_segfault_secret", next.sshSecret);
+  } catch (_) {}
   return next;
 }
 
@@ -91,6 +106,11 @@ function ensureDefaultSettings() {
     wispUrl: "",
       apiKey: (s.apiKey || "").trim(),
     customDns: (s.customDns || "").trim() || DEFAULTS.customDns || "",
+    sshHost: (s.sshHost || "").trim() || DEFAULTS.sshHost || "segfault.net",
+    sshPort: Number(s.sshPort) || Number(DEFAULTS.sshPort) || 443,
+    sshUser: (s.sshUser || "").trim() || DEFAULTS.sshUser || "root",
+    sshPassword: s.sshPassword == null ? (DEFAULTS.sshPassword || "segfault") : String(s.sshPassword),
+    sshSecret: (s.sshSecret || "").trim(),
   };
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -115,6 +135,11 @@ function fillSettingsForm() {
   if (el.apiKey) el.apiKey.value = s.apiKey || "";
   if (el.apiBase) el.apiBase.value = s.apiBase || DEFAULTS.apiBase;
   if (el.cdpUrl) el.cdpUrl.value = s.cdpUrl || "http://127.0.0.1:9222";
+  if (el.sshHost) el.sshHost.value = s.sshHost || DEFAULTS.sshHost || "segfault.net";
+  if (el.sshPort) el.sshPort.value = s.sshPort || DEFAULTS.sshPort || 443;
+  if (el.sshUser) el.sshUser.value = s.sshUser || DEFAULTS.sshUser || "root";
+  if (el.sshPassword) el.sshPassword.value = s.sshPassword == null ? (DEFAULTS.sshPassword || "") : s.sshPassword;
+  if (el.sshSecret) el.sshSecret.value = s.sshSecret || "";
   /* dns option removed */
   try {
     applyProviderPreset(el.provider ? el.provider.value : pid);
@@ -186,9 +211,21 @@ function saveSettingsFromForm() {
     return null;
   }
   const cdpUrl = (el.cdpUrl && el.cdpUrl.value || "").trim() || "http://127.0.0.1:9222";
-  const s = { provider: p ? p.id : provider, apiBase, apiModel, apiKey, customDns, cdpUrl };
+  const sshHost = (el.sshHost && el.sshHost.value || "").trim() || DEFAULTS.sshHost || "segfault.net";
+  const sshPort = Number(el.sshPort && el.sshPort.value) || Number(DEFAULTS.sshPort) || 443;
+  const sshUser = (el.sshUser && el.sshUser.value || "").trim() || DEFAULTS.sshUser || "root";
+  const sshPassword = el.sshPassword ? String(el.sshPassword.value) : (DEFAULTS.sshPassword || "");
+  const sshSecret = (el.sshSecret && el.sshSecret.value || "").trim();
+  const s = { provider: p ? p.id : provider, apiBase, apiModel, apiKey, customDns, cdpUrl, sshHost, sshPort, sshUser, sshPassword, sshSecret };
   saveSettings(s);
   return s;
+}
+
+function applySshDefaultsToForm() {
+  if (el.sshHost) el.sshHost.value = "segfault.net";
+  if (el.sshPort) el.sshPort.value = "443";
+  if (el.sshUser) el.sshUser.value = "root";
+  if (el.sshPassword) el.sshPassword.value = "segfault";
 }
 
 async function refreshCacheStats() {

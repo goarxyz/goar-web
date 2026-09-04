@@ -522,6 +522,52 @@
     }, Math.min(15000, 1200 + SSH.reconnects * 800));
   }
 
+  function resolveSshTarget() {
+    const defHost = DEFAULT_HOST;
+    const defUser = DEFAULT_USER;
+    const defPass = DEFAULT_PASS;
+    let s = {};
+    try {
+      s = typeof loadSettings === "function" ? loadSettings() : (typeof settingsSnapshot === "function" ? settingsSnapshot() : {});
+    } catch (_) {}
+    s = s || {};
+    let host = String(s.sshHost || defHost).trim() || defHost;
+    let user = String(s.sshUser || defUser).trim() || defUser;
+    let port = Number(s.sshPort);
+    const at = host.match(/^([^@\s]+)@(.+)$/);
+    if (at) {
+      user = at[1] || user;
+      host = at[2];
+    }
+    const br = host.match(/^\[([^\]]+)\](?::(\d+))?$/);
+    if (br) {
+      host = br[1];
+      if (br[2]) port = Number(br[2]);
+    } else {
+      const hp = host.match(/^([^:\s]+):(\d+)$/);
+      if (hp) {
+        host = hp[1];
+        port = Number(hp[2]);
+      }
+    }
+    const isKali = !host || host === defHost;
+    const password =
+      s.sshPassword != null && String(s.sshPassword).length
+        ? String(s.sshPassword)
+        : isKali
+          ? defPass
+          : "";
+    let secret = String(s.sshSecret || "").trim();
+    if (!secret) secret = readSecret();
+    const ports =
+      Number.isFinite(port) && port > 0
+        ? [port]
+        : isKali
+          ? DEFAULT_PORTS.slice()
+          : [22];
+    return { host: host, user: user, password: password, secret: secret, ports: ports };
+  }
+
   async function connectOnce() {
     if (typeof ensureMwFabric === "function") {
       try {
@@ -534,28 +580,30 @@
     const mux = await openWispMux(wisp);
     SSH.mux = mux;
     let last = null;
-    const ports = DEFAULT_PORTS.slice();
+    const target = resolveSshTarget();
+    if (target.secret) SSH.secret = target.secret;
+    const ports = target.ports;
     for (let i = 0; i < ports.length; i++) {
       const port = ports[i];
       let sock;
       try {
-        sock = mux.openTcp(DEFAULT_HOST, port);
+        sock = mux.openTcp(target.host, port);
       } catch (e) {
         last = e;
         continue;
       }
       try {
         const sess = await sshSession(sock, {
-          host: DEFAULT_HOST,
+          host: target.host,
           port: port,
-          user: DEFAULT_USER,
-          password: DEFAULT_PASS,
-          secret: SSH.secret,
+          user: target.user,
+          password: target.password,
+          secret: target.secret || SSH.secret,
         });
         SSH.sock = sess;
         SSH.port = port;
-        SSH.host = DEFAULT_HOST;
-        SSH.user = DEFAULT_USER;
+        SSH.host = target.host;
+        SSH.user = target.user;
         SSH.ready = true;
         SSH.lastError = "";
         SSH.startedAt = now();
@@ -571,7 +619,7 @@
         } catch (_) {}
       }
     }
-    throw last || new Error("unable to open SSH to " + DEFAULT_HOST);
+    throw last || new Error("unable to open SSH to " + target.host);
   }
 
   async function ensureSsh(opts) {
@@ -580,6 +628,12 @@
       return { ready: false, disabled: true };
     }
     if (SSH.ready && SSH.sock && !opts.force) return sshStatus();
+    if (opts.force) {
+      SSH.ready = false;
+      try { if (SSH.sock && typeof SSH.sock.close === "function") SSH.sock.close(); } catch (_) {}
+      try { if (SSH.mux && typeof SSH.mux.close === "function") SSH.mux.close(); } catch (_) {}
+      SSH.sock = null;
+    }
     if (SSH.connecting) return SSH.connecting;
     SSH.connecting = (async function () {
       try {
@@ -688,6 +742,7 @@
     global.sshReady = sshReady;
     global.sshStatus = sshStatus;
     global.sshWrite = sshWrite;
+    global.resolveSshTarget = resolveSshTarget;
     global.__GOAR_SSH = SSH;
     global.__GOAR_ENSURE_SSH = ensureSsh;
   } catch (_) {}

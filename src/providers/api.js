@@ -156,6 +156,11 @@ const DEFAULTS = {
   customDns: "",
   temperature: 0.2,
   maxTokens: 1536,
+  sshHost: "segfault.net",
+  sshPort: 443,
+  sshUser: "root",
+  sshPassword: "segfault",
+  sshSecret: "",
 };
 
 /** Live DOM map — never snapshot nulls from missing design IDs */
@@ -190,6 +195,13 @@ const el = {
   get cdpUrl() { return _elOne("cdpUrl"); },
   get apiModel() { return _elOne("apiModel", "model-input"); },
   get customDns() { return _elOne("customDns"); },
+  get sshHost() { return _elOne("sshHost"); },
+  get sshPort() { return _elOne("sshPort"); },
+  get sshUser() { return _elOne("sshUser"); },
+  get sshPassword() { return _elOne("sshPassword"); },
+  get sshSecret() { return _elOne("sshSecret"); },
+  get btnSshDefault() { return _elOne("btnSshDefault"); },
+  get btnSshReconnect() { return _elOne("btnSshReconnect"); },
   get btnSaveSettings() { return _elOne("btnSaveSettings"); },
   get btnCloseSettings() { return _elOne("btnCloseSettings"); },
   get btnClearCache() { return _elOne("btnClearCache"); },

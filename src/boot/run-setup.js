@@ -68,12 +68,45 @@ el.btnSaveSettings?.addEventListener("click", () => {
   if (typeof syncModelSelect === "function") syncModelSelect(s.apiModel); else if (el.apiModel) el.apiModel.value = s.apiModel;
   if (el.apiKey) el.apiKey.value = s.apiKey;
   if (el.provider) el.provider.value = s.provider || detectProvider(s.apiBase);
-  if (el.status) el.status.textContent = "saved · loading models…";
+  if (el.status) el.status.textContent = "saved · connecting SSH…";
   closeSettings();
   loadModelsFromApi({ selected: s.apiModel }).then((ids) => {
     try { if (el.status) el.status.textContent = "saved · " + (ids && ids.length ? ids.length + " models" : s.apiModel); } catch (_) {}
     try { syncIndicators({}); refreshAgentPill(); } catch (_) {}
   }).catch(() => {});
+  if (typeof ensureSsh === "function") {
+    ensureSsh({ force: true, reason: "settings" }).then((st) => {
+      try {
+        if (el.status) el.status.textContent = (st && st.ready)
+          ? ("SSH " + (st.user || "") + "@" + (st.host || "") + ":" + (st.port || ""))
+          : ("SSH " + ((st && st.lastError) || "connecting"));
+      } catch (_) {}
+    }).catch(() => {});
+  }
+});
+el.btnSshDefault?.addEventListener("click", () => {
+  try { applySshDefaultsToForm(); } catch (_) {}
+  if (el.sshHost) el.sshHost.value = "segfault.net";
+  if (el.sshPort) el.sshPort.value = "443";
+  if (el.sshUser) el.sshUser.value = "root";
+  if (el.sshPassword) el.sshPassword.value = "segfault";
+});
+el.btnSshReconnect?.addEventListener("click", () => {
+  const s = saveSettingsFromForm();
+  if (!s) return;
+  if (typeof appendMsg === "function") appendMsg("Connecting SSH " + s.sshUser + "@" + s.sshHost + ":" + s.sshPort + "…", "sys");
+  if (typeof ensureSsh === "function") {
+    ensureSsh({ force: true, reason: "settings" }).then((st) => {
+      const ok = st && st.ready;
+      if (typeof appendMsg === "function") {
+        appendMsg(ok
+          ? ("SSH ready " + (st.user || "") + "@" + (st.host || "") + ":" + (st.port || ""))
+          : ("SSH failed: " + ((st && st.lastError) || "unknown")), ok ? "sys" : "err");
+      }
+    }).catch((e) => {
+      if (typeof appendMsg === "function") appendMsg("SSH: " + (e && e.message ? e.message : e), "err");
+    });
+  }
 });
 el.btnClearCache?.addEventListener("click", async () => {
   try {

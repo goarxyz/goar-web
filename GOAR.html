@@ -310,6 +310,34 @@
         <label for="apiModel">Model</label>
         <select id="apiModel"><option value="">Loading…</option></select>
       </div>
+      <h3 class="set-h">SSH instance</h3>
+      <p class="stat">Default is Kali at segfault.net. Point this at your own box — stored in this browser only.</p>
+      <div class="field">
+        <label for="sshHost">Host</label>
+        <input id="sshHost" type="text" autocomplete="off" spellcheck="false" placeholder="segfault.net">
+      </div>
+      <div class="field field-split">
+        <div>
+          <label for="sshPort">Port</label>
+          <input id="sshPort" type="number" min="1" max="65535" placeholder="443">
+        </div>
+        <div>
+          <label for="sshUser">User</label>
+          <input id="sshUser" type="text" autocomplete="off" spellcheck="false" placeholder="root">
+        </div>
+      </div>
+      <div class="field">
+        <label for="sshPassword">Password</label>
+        <input id="sshPassword" type="password" autocomplete="off" spellcheck="false" placeholder="segfault">
+      </div>
+      <div class="field">
+        <label for="sshSecret">Reconnect SECRET</label>
+        <input id="sshSecret" type="password" autocomplete="off" spellcheck="false" placeholder="auto-captured on Kali">
+      </div>
+      <div class="row-actions">
+        <button type="button" class="action" id="btnSshDefault">Kali default</button>
+        <button type="button" class="action" id="btnSshReconnect">Connect now</button>
+      </div>
       <div class="row-actions">
         <button type="button" class="action primary" id="btnSaveSettings">Save</button>
         <button type="button" class="action" id="btnCloseSettings">Close</button>
@@ -577,6 +605,8 @@ html,body{margin:0;height:100%;background:#1a1b1e;color:#ececec;font:14px/1.45 I
 #settings .action.danger{border-color:#422;color:#f88}
 #settings .sep{height:1px;background:#1a1a1a;margin:14px 0}
 #settings .stat{font-size:11px;color:#555}
+#settings .set-h{margin:18px 0 6px;font:600 12px/1.2 ui-sans-serif,system-ui;letter-spacing:.04em;text-transform:uppercase;color:#8a8a8a}
+#settings .field-split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 #screen_container{position:fixed;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none}
 #kb{position:fixed;left:-9999px;opacity:0}
 #running{display:none}
@@ -10308,6 +10338,11 @@ const DEFAULTS = {
   customDns: "",
   temperature: 0.2,
   maxTokens: 1536,
+  sshHost: "segfault.net",
+  sshPort: 443,
+  sshUser: "root",
+  sshPassword: "segfault",
+  sshSecret: "",
 };
 
 /** Live DOM map — never snapshot nulls from missing design IDs */
@@ -10342,6 +10377,13 @@ const el = {
   get cdpUrl() { return _elOne("cdpUrl"); },
   get apiModel() { return _elOne("apiModel", "model-input"); },
   get customDns() { return _elOne("customDns"); },
+  get sshHost() { return _elOne("sshHost"); },
+  get sshPort() { return _elOne("sshPort"); },
+  get sshUser() { return _elOne("sshUser"); },
+  get sshPassword() { return _elOne("sshPassword"); },
+  get sshSecret() { return _elOne("sshSecret"); },
+  get btnSshDefault() { return _elOne("btnSshDefault"); },
+  get btnSshReconnect() { return _elOne("btnSshReconnect"); },
   get btnSaveSettings() { return _elOne("btnSaveSettings"); },
   get btnCloseSettings() { return _elOne("btnCloseSettings"); },
   get btnClearCache() { return _elOne("btnClearCache"); },
@@ -10402,6 +10444,13 @@ function loadSettings() {
     if (s.customDns == null) s.customDns = DEFAULTS.customDns || "";
     if (!s.wispUrl) s.wispUrl = (typeof window !== "undefined" && window.GOAR_WISP_URL) || DEFAULTS.wispUrl || "";
     if (!s.cdpUrl) s.cdpUrl = "http://127.0.0.1:9222";
+    if (!s.sshHost) s.sshHost = (DEFAULTS.sshHost || "segfault.net");
+    if (s.sshPort == null || s.sshPort === "") s.sshPort = DEFAULTS.sshPort || 443;
+    if (!s.sshUser) s.sshUser = DEFAULTS.sshUser || "root";
+    if (s.sshPassword == null) s.sshPassword = DEFAULTS.sshPassword || "segfault";
+    if (s.sshSecret == null || s.sshSecret === "") {
+      try { s.sshSecret = localStorage.getItem("goar_segfault_secret") || ""; } catch (_) { s.sshSecret = ""; }
+    }
     return s;
   } catch (_) {
     return { ...DEFAULTS };
@@ -10423,7 +10472,15 @@ function saveSettings(partial) {
   next.apiModel = (next.apiModel || "").trim();
   next.apiKey = (next.apiKey || "").trim();
   next.customDns = (next.customDns || "").trim();
+  next.sshHost = (next.sshHost || DEFAULTS.sshHost || "segfault.net").trim();
+  next.sshPort = Number(next.sshPort) || Number(DEFAULTS.sshPort) || 443;
+  next.sshUser = (next.sshUser || DEFAULTS.sshUser || "root").trim();
+  next.sshPassword = next.sshPassword == null ? (DEFAULTS.sshPassword || "") : String(next.sshPassword);
+  next.sshSecret = (next.sshSecret || "").trim();
   try { localStorage.setItem(LS_KEY, JSON.stringify(next)); } catch (_) {}
+  try {
+    if (next.sshSecret) localStorage.setItem("goar_segfault_secret", next.sshSecret);
+  } catch (_) {}
   return next;
 }
 
@@ -10473,6 +10530,11 @@ function ensureDefaultSettings() {
     wispUrl: "",
       apiKey: (s.apiKey || "").trim(),
     customDns: (s.customDns || "").trim() || DEFAULTS.customDns || "",
+    sshHost: (s.sshHost || "").trim() || DEFAULTS.sshHost || "segfault.net",
+    sshPort: Number(s.sshPort) || Number(DEFAULTS.sshPort) || 443,
+    sshUser: (s.sshUser || "").trim() || DEFAULTS.sshUser || "root",
+    sshPassword: s.sshPassword == null ? (DEFAULTS.sshPassword || "segfault") : String(s.sshPassword),
+    sshSecret: (s.sshSecret || "").trim(),
   };
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -10497,6 +10559,11 @@ function fillSettingsForm() {
   if (el.apiKey) el.apiKey.value = s.apiKey || "";
   if (el.apiBase) el.apiBase.value = s.apiBase || DEFAULTS.apiBase;
   if (el.cdpUrl) el.cdpUrl.value = s.cdpUrl || "http://127.0.0.1:9222";
+  if (el.sshHost) el.sshHost.value = s.sshHost || DEFAULTS.sshHost || "segfault.net";
+  if (el.sshPort) el.sshPort.value = s.sshPort || DEFAULTS.sshPort || 443;
+  if (el.sshUser) el.sshUser.value = s.sshUser || DEFAULTS.sshUser || "root";
+  if (el.sshPassword) el.sshPassword.value = s.sshPassword == null ? (DEFAULTS.sshPassword || "") : s.sshPassword;
+  if (el.sshSecret) el.sshSecret.value = s.sshSecret || "";
   /* dns option removed */
   try {
     applyProviderPreset(el.provider ? el.provider.value : pid);
@@ -10568,9 +10635,21 @@ function saveSettingsFromForm() {
     return null;
   }
   const cdpUrl = (el.cdpUrl && el.cdpUrl.value || "").trim() || "http://127.0.0.1:9222";
-  const s = { provider: p ? p.id : provider, apiBase, apiModel, apiKey, customDns, cdpUrl };
+  const sshHost = (el.sshHost && el.sshHost.value || "").trim() || DEFAULTS.sshHost || "segfault.net";
+  const sshPort = Number(el.sshPort && el.sshPort.value) || Number(DEFAULTS.sshPort) || 443;
+  const sshUser = (el.sshUser && el.sshUser.value || "").trim() || DEFAULTS.sshUser || "root";
+  const sshPassword = el.sshPassword ? String(el.sshPassword.value) : (DEFAULTS.sshPassword || "");
+  const sshSecret = (el.sshSecret && el.sshSecret.value || "").trim();
+  const s = { provider: p ? p.id : provider, apiBase, apiModel, apiKey, customDns, cdpUrl, sshHost, sshPort, sshUser, sshPassword, sshSecret };
   saveSettings(s);
   return s;
+}
+
+function applySshDefaultsToForm() {
+  if (el.sshHost) el.sshHost.value = "segfault.net";
+  if (el.sshPort) el.sshPort.value = "443";
+  if (el.sshUser) el.sshUser.value = "root";
+  if (el.sshPassword) el.sshPassword.value = "segfault";
 }
 
 async function refreshCacheStats() {
@@ -15028,6 +15107,52 @@ try { window.goarLoopbackFetch = goarLoopbackFetch; } catch (_) {}
     }, Math.min(15000, 1200 + SSH.reconnects * 800));
   }
 
+  function resolveSshTarget() {
+    const defHost = DEFAULT_HOST;
+    const defUser = DEFAULT_USER;
+    const defPass = DEFAULT_PASS;
+    let s = {};
+    try {
+      s = typeof loadSettings === "function" ? loadSettings() : (typeof settingsSnapshot === "function" ? settingsSnapshot() : {});
+    } catch (_) {}
+    s = s || {};
+    let host = String(s.sshHost || defHost).trim() || defHost;
+    let user = String(s.sshUser || defUser).trim() || defUser;
+    let port = Number(s.sshPort);
+    const at = host.match(/^([^@\s]+)@(.+)$/);
+    if (at) {
+      user = at[1] || user;
+      host = at[2];
+    }
+    const br = host.match(/^\[([^\]]+)\](?::(\d+))?$/);
+    if (br) {
+      host = br[1];
+      if (br[2]) port = Number(br[2]);
+    } else {
+      const hp = host.match(/^([^:\s]+):(\d+)$/);
+      if (hp) {
+        host = hp[1];
+        port = Number(hp[2]);
+      }
+    }
+    const isKali = !host || host === defHost;
+    const password =
+      s.sshPassword != null && String(s.sshPassword).length
+        ? String(s.sshPassword)
+        : isKali
+          ? defPass
+          : "";
+    let secret = String(s.sshSecret || "").trim();
+    if (!secret) secret = readSecret();
+    const ports =
+      Number.isFinite(port) && port > 0
+        ? [port]
+        : isKali
+          ? DEFAULT_PORTS.slice()
+          : [22];
+    return { host: host, user: user, password: password, secret: secret, ports: ports };
+  }
+
   async function connectOnce() {
     if (typeof ensureMwFabric === "function") {
       try {
@@ -15040,28 +15165,30 @@ try { window.goarLoopbackFetch = goarLoopbackFetch; } catch (_) {}
     const mux = await openWispMux(wisp);
     SSH.mux = mux;
     let last = null;
-    const ports = DEFAULT_PORTS.slice();
+    const target = resolveSshTarget();
+    if (target.secret) SSH.secret = target.secret;
+    const ports = target.ports;
     for (let i = 0; i < ports.length; i++) {
       const port = ports[i];
       let sock;
       try {
-        sock = mux.openTcp(DEFAULT_HOST, port);
+        sock = mux.openTcp(target.host, port);
       } catch (e) {
         last = e;
         continue;
       }
       try {
         const sess = await sshSession(sock, {
-          host: DEFAULT_HOST,
+          host: target.host,
           port: port,
-          user: DEFAULT_USER,
-          password: DEFAULT_PASS,
-          secret: SSH.secret,
+          user: target.user,
+          password: target.password,
+          secret: target.secret || SSH.secret,
         });
         SSH.sock = sess;
         SSH.port = port;
-        SSH.host = DEFAULT_HOST;
-        SSH.user = DEFAULT_USER;
+        SSH.host = target.host;
+        SSH.user = target.user;
         SSH.ready = true;
         SSH.lastError = "";
         SSH.startedAt = now();
@@ -15077,7 +15204,7 @@ try { window.goarLoopbackFetch = goarLoopbackFetch; } catch (_) {}
         } catch (_) {}
       }
     }
-    throw last || new Error("unable to open SSH to " + DEFAULT_HOST);
+    throw last || new Error("unable to open SSH to " + target.host);
   }
 
   async function ensureSsh(opts) {
@@ -15086,6 +15213,12 @@ try { window.goarLoopbackFetch = goarLoopbackFetch; } catch (_) {}
       return { ready: false, disabled: true };
     }
     if (SSH.ready && SSH.sock && !opts.force) return sshStatus();
+    if (opts.force) {
+      SSH.ready = false;
+      try { if (SSH.sock && typeof SSH.sock.close === "function") SSH.sock.close(); } catch (_) {}
+      try { if (SSH.mux && typeof SSH.mux.close === "function") SSH.mux.close(); } catch (_) {}
+      SSH.sock = null;
+    }
     if (SSH.connecting) return SSH.connecting;
     SSH.connecting = (async function () {
       try {
@@ -15194,6 +15327,7 @@ try { window.goarLoopbackFetch = goarLoopbackFetch; } catch (_) {}
     global.sshReady = sshReady;
     global.sshStatus = sshStatus;
     global.sshWrite = sshWrite;
+    global.resolveSshTarget = resolveSshTarget;
     global.__GOAR_SSH = SSH;
     global.__GOAR_ENSURE_SSH = ensureSsh;
   } catch (_) {}
@@ -18910,12 +19044,45 @@ el.btnSaveSettings?.addEventListener("click", () => {
   if (typeof syncModelSelect === "function") syncModelSelect(s.apiModel); else if (el.apiModel) el.apiModel.value = s.apiModel;
   if (el.apiKey) el.apiKey.value = s.apiKey;
   if (el.provider) el.provider.value = s.provider || detectProvider(s.apiBase);
-  if (el.status) el.status.textContent = "saved · loading models…";
+  if (el.status) el.status.textContent = "saved · connecting SSH…";
   closeSettings();
   loadModelsFromApi({ selected: s.apiModel }).then((ids) => {
     try { if (el.status) el.status.textContent = "saved · " + (ids && ids.length ? ids.length + " models" : s.apiModel); } catch (_) {}
     try { syncIndicators({}); refreshAgentPill(); } catch (_) {}
   }).catch(() => {});
+  if (typeof ensureSsh === "function") {
+    ensureSsh({ force: true, reason: "settings" }).then((st) => {
+      try {
+        if (el.status) el.status.textContent = (st && st.ready)
+          ? ("SSH " + (st.user || "") + "@" + (st.host || "") + ":" + (st.port || ""))
+          : ("SSH " + ((st && st.lastError) || "connecting"));
+      } catch (_) {}
+    }).catch(() => {});
+  }
+});
+el.btnSshDefault?.addEventListener("click", () => {
+  try { applySshDefaultsToForm(); } catch (_) {}
+  if (el.sshHost) el.sshHost.value = "segfault.net";
+  if (el.sshPort) el.sshPort.value = "443";
+  if (el.sshUser) el.sshUser.value = "root";
+  if (el.sshPassword) el.sshPassword.value = "segfault";
+});
+el.btnSshReconnect?.addEventListener("click", () => {
+  const s = saveSettingsFromForm();
+  if (!s) return;
+  if (typeof appendMsg === "function") appendMsg("Connecting SSH " + s.sshUser + "@" + s.sshHost + ":" + s.sshPort + "…", "sys");
+  if (typeof ensureSsh === "function") {
+    ensureSsh({ force: true, reason: "settings" }).then((st) => {
+      const ok = st && st.ready;
+      if (typeof appendMsg === "function") {
+        appendMsg(ok
+          ? ("SSH ready " + (st.user || "") + "@" + (st.host || "") + ":" + (st.port || ""))
+          : ("SSH failed: " + ((st && st.lastError) || "unknown")), ok ? "sys" : "err");
+      }
+    }).catch((e) => {
+      if (typeof appendMsg === "function") appendMsg("SSH: " + (e && e.message ? e.message : e), "err");
+    });
+  }
 });
 el.btnClearCache?.addEventListener("click", async () => {
   try {

@@ -54,6 +54,8 @@ html,body{margin:0;height:100%;background:#1a1b1e;color:#ececec;font:14px/1.45 I
 #settings .action.danger{border-color:#422;color:#f88}
 #settings .sep{height:1px;background:#1a1a1a;margin:14px 0}
 #settings .stat{font-size:11px;color:#555}
+#settings .set-h{margin:18px 0 6px;font:600 12px/1.2 ui-sans-serif,system-ui;letter-spacing:.04em;text-transform:uppercase;color:#8a8a8a}
+#settings .field-split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 #screen_container{position:fixed;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none}
 #kb{position:fixed;left:-9999px;opacity:0}
 #running{display:none}
