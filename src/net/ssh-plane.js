@@ -670,7 +670,7 @@
       const end = "GOE" + id;
       const cmd = String(command || "").replace(/\r/g, "");
       const wrapped =
-        "echo " +
+        "stty -echo 2>/dev/null; echo " +
         start +
         "; { " +
         cmd +
@@ -680,7 +680,7 @@
         id +
         " 2>/dev/null; echo " +
         end +
-        ":$EC\n";
+        ":$EC; stty echo 2>/dev/null\n";
       const mark = SSH.buf.length;
       SSH.sock.write(wrapped);
       SSH.execs += 1;

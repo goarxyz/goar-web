@@ -43,6 +43,19 @@ function initTerm() {
   // xterm → serial: Linux line discipline wants LF; map CR→LF
   let _typed = "";
   term.onData((data) => {
+    if (typeof sshReady === "function" && sshReady() && typeof sshWrite === "function") {
+      try { sshWrite(data); } catch (_) {}
+      return;
+    }
+    if (typeof ensureSsh === "function") {
+      try {
+        ensureSsh({ reason: "term" }).then(function (st) {
+          if (st && st.ready && typeof sshWrite === "function") {
+            try { sshWrite(data); } catch (_) {}
+          }
+        }).catch(function () {});
+      } catch (_) {}
+    }
     if (window.__GOAR_UNIX && typeof unixOnData === "function") {
       unixOnData(data);
       return;
@@ -156,6 +169,13 @@ function attachTermView() {
     fit();
     requestAnimationFrame(fit);
   });
+  try {
+    if (typeof sshReady === "function" && sshReady() && typeof sshWrite === "function") {
+      sshWrite("stty echo 2>/dev/null; export PS1='GOAR# '\n");
+    } else if (typeof ensureSsh === "function") {
+      ensureSsh({ reason: "term" }).catch(function () {});
+    }
+  } catch (_) {}
   if (stage && !stage._goarFocus) {
     stage._goarFocus = true;
     stage.addEventListener("pointerdown", () => focusLiveTerm());
