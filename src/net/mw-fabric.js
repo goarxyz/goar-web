@@ -356,6 +356,10 @@ function readManusKey() {
     const b = localStorage.getItem(MANUS_LS_LEGACY);
     if (b) return b;
   } catch (_) {}
+  try {
+    const baked = typeof window !== "undefined" && window.GOAR_MANUS_KEY;
+    if (baked && /^cpx_/.test(String(baked))) return String(baked);
+  } catch (_) {}
   return "";
 }
 

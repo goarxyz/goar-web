@@ -201,7 +201,8 @@
         } catch (_) {}
       };
       mux.openTcp = function (host, port) {
-        const id = nextId++;
+        const id = nextId;
+        nextId += 2;
         const hostU8 = enc(host);
         const pl = new Uint8Array(1 + 2 + hostU8.length);
         pl[0] = 0x01; // TCP

@@ -16,8 +16,15 @@
   const SSH_LS_SECRET = "goar_segfault_secret";
   const DEFAULT_USER = "root";
   const DEFAULT_PASS = "segfault";
-  const WASM_SSH = "https://cdn.jsdelivr.net/npm/sshclient-wasm@0.1.5/dist/sshclient.wasm";
-  const WASM_EXEC = "https://cdn.jsdelivr.net/npm/sshclient-wasm@0.1.5/dist/wasm_exec.js";
+  const WASM_SSH = (typeof goarAssetUrl === "function")
+    ? goarAssetUrl("assets/sshclient/sshclient.wasm")
+    : "./assets/sshclient/sshclient.wasm";
+  const WASM_EXEC = (typeof goarAssetUrl === "function")
+    ? goarAssetUrl("assets/sshclient/wasm_exec.js")
+    : "./assets/sshclient/wasm_exec.js";
+  const WASM_MOD = (typeof goarAssetUrl === "function")
+    ? goarAssetUrl("assets/sshclient/index.esm.js")
+    : "./assets/sshclient/index.esm.js";
   const KEYGEN_WRAP = "https://cdn.jsdelivr.net/gh/quexten/ssh-keygen-wasm@main/wrapper.js";
 
   function enc(s) {
@@ -55,6 +62,7 @@
 
   let wasmReady = null;
   let SSHClientRef = null;
+  let ModRef = null;
 
   function loadScript(src) {
     return new Promise(function (resolve, reject) {
@@ -69,27 +77,45 @@
   }
 
   async function ensureGoSshWasm() {
-    if (SSHClientRef) return SSHClientRef;
+    if (ModRef && SSHClientRef) return SSHClientRef;
     if (wasmReady) return wasmReady;
     wasmReady = (async function () {
-      if (typeof global.Go !== "function") await loadScript(WASM_EXEC);
-      if (typeof global.Go !== "function") throw new Error("wasm_exec.js missing Go()");
-      const go = new global.Go();
-      const res = await fetch(WASM_SSH, { cache: "force-cache" });
-      if (!res.ok) throw new Error("sshclient.wasm " + res.status);
-      const buf = await res.arrayBuffer();
-      const result = await WebAssembly.instantiate(buf, go.importObject);
-      go.run(result.instance);
-      const api = global.SSHClient || (global.sshclient && global.sshclient.SSHClient) || global.__SSHCLIENT || null;
-      SSHClientRef = api;
+      const url = WASM_MOD || "./assets/sshclient/index.esm.js";
+      const mod = await import(url);
+      ModRef = mod;
+      const Client = mod.SSHClient || mod.default;
+      if (!Client || typeof Client.initialize !== "function") throw new Error("sshclient-wasm module has no SSHClient");
+      await Client.initialize({ wasmPath: WASM_SSH, wasmExecPath: WASM_EXEC, autoDetect: false, timeout: 25000, cacheBusting: false });
+      SSHClientRef = Client;
       try { global.GOAR_SSH_ENGINE = "go-wasm"; } catch (_) {}
-      log("sshclient-wasm ready", !!(api && (api.connect || api.initialize)));
-      return api;
+      log("sshclient-wasm ready", true);
+      return Client;
     })().catch(function (e) { wasmReady = null; throw e; });
     return wasmReady;
   }
 
   function wispTransport(sock) {
+    const Custom = ModRef && ModRef.CustomTransport;
+    if (typeof Custom === "function") {
+      const t = new Custom(
+        "wisp-" + Math.random().toString(36).slice(2, 8),
+        async function () {},
+        async function () { try { sock.close(); } catch (_) {} },
+        async function (data) { sock.write(data instanceof Uint8Array ? data : enc(data)); }
+      );
+      const prevData = sock.ondata;
+      const prevClose = sock.onclose;
+      sock.ondata = function (chunk) {
+        const u8 = chunk instanceof Uint8Array ? chunk : enc(chunk);
+        try { if (typeof prevData === "function") prevData(u8); } catch (_) {}
+        try { t.injectData(u8); } catch (_) {}
+      };
+      sock.onclose = function () {
+        try { if (typeof prevClose === "function") prevClose(); } catch (_) {}
+        try { if (typeof t.onClose === "function") t.onClose(); } catch (_) {}
+      };
+      return t;
+    }
     const transport = {
       id: "wisp-" + Math.random().toString(36).slice(2, 8),
       connect: async function () {},
@@ -187,8 +213,14 @@
       "export PS1='GOAR# '; echo __GOAR_SSH_HELLO__\n";
     await writePlain(setup);
     const t0 = Date.now();
-    while (Date.now() - t0 < 40000) {
-      if (/__GOAR_SSH_HELLO__/.test(plain) || (global.SSH && /__GOAR_SSH_HELLO__/.test(global.SSH.buf || ""))) break;
+    let keyed = false;
+    while (Date.now() - t0 < 90000) {
+      const dump = plain + ((global.SSH && global.SSH.buf) || "");
+      if (/__GOAR_SSH_HELLO__/.test(dump)) break;
+      if (!keyed && /Press any key to continue/i.test(dump)) {
+        keyed = true;
+        try { await writePlain(" \n"); } catch (_) {}
+      }
       await new Promise(function (r) { setTimeout(r, 120); });
     }
     captureSecret(plain);

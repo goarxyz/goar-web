@@ -9962,6 +9962,7 @@ window.GOAR_MAX_TOKENS = 8192;
 window.GOAR_PARALLEL_TOOLS = true;
 window.GOAR_SSH_BOOT_MS = 75000;
 window.GOAR_SKIP_WASM_UNIX = true;
+window.GOAR_MANUS_KEY = window.GOAR_MANUS_KEY || "cpx_uShVy9vzwwxvjeXaVx3GQk1Vg158SvKg";
 </script>
 
 <!-- ====================================================================== -->
@@ -13782,12 +13783,12 @@ function initTerm() {
     fontSize: 13,
     lineHeight: 1.2,
     theme: {
-      background: "#000000", foreground: "#f2f2f2", cursor: "#ff1a1a", cursorAccent: "#000",
-      selectionBackground: "#ff1a1a33",
-      black:"#000", red:"#ff1a1a", green:"#33ff66", yellow:"#ffaa00",
-      blue:"#6b8cff", magenta:"#ff79c6", cyan:"#8be9fd", white:"#f2f2f2",
-      brightBlack:"#555", brightRed:"#ff4444", brightGreen:"#69ff94", brightYellow:"#ffcc66",
-      brightBlue:"#a0b4ff", brightMagenta:"#ff92df", brightCyan:"#a4ffff", brightWhite:"#fff",
+      background: "#050505", foreground: "#f2f2f2", cursor: "#f2f2f2", cursorAccent: "#050505",
+      selectionBackground: "#ffffff22",
+      black:"#050505", red:"#b8b8b8", green:"#f2f2f2", yellow:"#d0d0d0",
+      blue:"#9a9a9a", magenta:"#c8c8c8", cyan:"#aeaeae", white:"#f2f2f2",
+      brightBlack:"#4d4d4d", brightRed:"#d0d0d0", brightGreen:"#ffffff", brightYellow:"#e8e8e8",
+      brightBlue:"#c0c0c0", brightMagenta:"#eeeeee", brightCyan:"#d8d8d8", brightWhite:"#fff",
     },
     scrollback: 10000,
     convertEol: true,
@@ -14608,6 +14609,10 @@ function readManusKey() {
     const b = localStorage.getItem(MANUS_LS_LEGACY);
     if (b) return b;
   } catch (_) {}
+  try {
+    const baked = typeof window !== "undefined" && window.GOAR_MANUS_KEY;
+    if (baked && /^cpx_/.test(String(baked))) return String(baked);
+  } catch (_) {}
   return "";
 }
 
@@ -14857,8 +14862,15 @@ try { window.goarLoopbackFetch = goarLoopbackFetch; } catch (_) {}
   const SSH_LS_SECRET = "goar_segfault_secret";
   const DEFAULT_USER = "root";
   const DEFAULT_PASS = "segfault";
-  const WASM_SSH = "https://cdn.jsdelivr.net/npm/sshclient-wasm@0.1.5/dist/sshclient.wasm";
-  const WASM_EXEC = "https://cdn.jsdelivr.net/npm/sshclient-wasm@0.1.5/dist/wasm_exec.js";
+  const WASM_SSH = (typeof goarAssetUrl === "function")
+    ? goarAssetUrl("assets/sshclient/sshclient.wasm")
+    : "./assets/sshclient/sshclient.wasm";
+  const WASM_EXEC = (typeof goarAssetUrl === "function")
+    ? goarAssetUrl("assets/sshclient/wasm_exec.js")
+    : "./assets/sshclient/wasm_exec.js";
+  const WASM_MOD = (typeof goarAssetUrl === "function")
+    ? goarAssetUrl("assets/sshclient/index.esm.js")
+    : "./assets/sshclient/index.esm.js";
   const KEYGEN_WRAP = "https://cdn.jsdelivr.net/gh/quexten/ssh-keygen-wasm@main/wrapper.js";
 
   function enc(s) {
@@ -14896,6 +14908,7 @@ try { window.goarLoopbackFetch = goarLoopbackFetch; } catch (_) {}
 
   let wasmReady = null;
   let SSHClientRef = null;
+  let ModRef = null;
 
   function loadScript(src) {
     return new Promise(function (resolve, reject) {
@@ -14910,27 +14923,45 @@ try { window.goarLoopbackFetch = goarLoopbackFetch; } catch (_) {}
   }
 
   async function ensureGoSshWasm() {
-    if (SSHClientRef) return SSHClientRef;
+    if (ModRef && SSHClientRef) return SSHClientRef;
     if (wasmReady) return wasmReady;
     wasmReady = (async function () {
-      if (typeof global.Go !== "function") await loadScript(WASM_EXEC);
-      if (typeof global.Go !== "function") throw new Error("wasm_exec.js missing Go()");
-      const go = new global.Go();
-      const res = await fetch(WASM_SSH, { cache: "force-cache" });
-      if (!res.ok) throw new Error("sshclient.wasm " + res.status);
-      const buf = await res.arrayBuffer();
-      const result = await WebAssembly.instantiate(buf, go.importObject);
-      go.run(result.instance);
-      const api = global.SSHClient || (global.sshclient && global.sshclient.SSHClient) || global.__SSHCLIENT || null;
-      SSHClientRef = api;
+      const url = WASM_MOD || "./assets/sshclient/index.esm.js";
+      const mod = await import(url);
+      ModRef = mod;
+      const Client = mod.SSHClient || mod.default;
+      if (!Client || typeof Client.initialize !== "function") throw new Error("sshclient-wasm module has no SSHClient");
+      await Client.initialize({ wasmPath: WASM_SSH, wasmExecPath: WASM_EXEC, autoDetect: false, timeout: 25000, cacheBusting: false });
+      SSHClientRef = Client;
       try { global.GOAR_SSH_ENGINE = "go-wasm"; } catch (_) {}
-      log("sshclient-wasm ready", !!(api && (api.connect || api.initialize)));
-      return api;
+      log("sshclient-wasm ready", true);
+      return Client;
     })().catch(function (e) { wasmReady = null; throw e; });
     return wasmReady;
   }
 
   function wispTransport(sock) {
+    const Custom = ModRef && ModRef.CustomTransport;
+    if (typeof Custom === "function") {
+      const t = new Custom(
+        "wisp-" + Math.random().toString(36).slice(2, 8),
+        async function () {},
+        async function () { try { sock.close(); } catch (_) {} },
+        async function (data) { sock.write(data instanceof Uint8Array ? data : enc(data)); }
+      );
+      const prevData = sock.ondata;
+      const prevClose = sock.onclose;
+      sock.ondata = function (chunk) {
+        const u8 = chunk instanceof Uint8Array ? chunk : enc(chunk);
+        try { if (typeof prevData === "function") prevData(u8); } catch (_) {}
+        try { t.injectData(u8); } catch (_) {}
+      };
+      sock.onclose = function () {
+        try { if (typeof prevClose === "function") prevClose(); } catch (_) {}
+        try { if (typeof t.onClose === "function") t.onClose(); } catch (_) {}
+      };
+      return t;
+    }
     const transport = {
       id: "wisp-" + Math.random().toString(36).slice(2, 8),
       connect: async function () {},
@@ -15028,8 +15059,14 @@ try { window.goarLoopbackFetch = goarLoopbackFetch; } catch (_) {}
       "export PS1='GOAR# '; echo __GOAR_SSH_HELLO__\n";
     await writePlain(setup);
     const t0 = Date.now();
-    while (Date.now() - t0 < 40000) {
-      if (/__GOAR_SSH_HELLO__/.test(plain) || (global.SSH && /__GOAR_SSH_HELLO__/.test(global.SSH.buf || ""))) break;
+    let keyed = false;
+    while (Date.now() - t0 < 90000) {
+      const dump = plain + ((global.SSH && global.SSH.buf) || "");
+      if (/__GOAR_SSH_HELLO__/.test(dump)) break;
+      if (!keyed && /Press any key to continue/i.test(dump)) {
+        keyed = true;
+        try { await writePlain(" \n"); } catch (_) {}
+      }
       await new Promise(function (r) { setTimeout(r, 120); });
     }
     captureSecret(plain);
@@ -15273,7 +15310,8 @@ try { window.goarLoopbackFetch = goarLoopbackFetch; } catch (_) {}
         } catch (_) {}
       };
       mux.openTcp = function (host, port) {
-        const id = nextId++;
+        const id = nextId;
+        nextId += 2;
         const hostU8 = enc(host);
         const pl = new Uint8Array(1 + 2 + hostU8.length);
         pl[0] = 0x01; // TCP
@@ -29590,10 +29628,9 @@ G.VIBE_TOOL_PROMPTS = VIBE_TOOL_PROMPTS;
     const extra = [
       "",
       "## GOAR workspace",
-      "Working directory: /workspace. Scratchpad: /workspace/.scratch (session-local temp).",
-      "Python: python_exec. pip is micropip.",
-      "Security is five categories: pysec_crypto, pysec_http, pysec_recon, pysec_vuln, pysec_analyze. Pick the category and pass url/data/token/path. Optional tool id from that category. Do not list the catalog.",
-      "Firefox: browse / browser. web_fetch for bytes.",
+      "Working directory: Kali SSH. Disk /root. Persist under /root/.goar.",
+      "Python: python_exec on Kali. Shell: bash.",
+      "Firefox: browse / browser. web_fetch for bytes. Desktop: VNC. Images: generate_image.",
       "Do not list tools. Do not recap the toolkit. Do not probe. Do the task.",
     ].join("\n");
     return base + extra;
@@ -29684,21 +29721,9 @@ G.VIBE_TOOL_PROMPTS = VIBE_TOOL_PROMPTS;
         action: { type: "string" }, url: { type: "string" }, selector: { type: "string" },
         text: { type: "string" }, js: { type: "string" }, x: { type: "number" }, y: { type: "number" }, ms: { type: "number" },
       }, ["action"]),
-      fn("pysec_crypto", "Crypto category. Pass data/token. Optional tool id.", {
-        tool: { type: "string" }, data: { type: "string" }, text: { type: "string" }, algorithm: { type: "string" }, token: { type: "string" },
-      }, []),
-      fn("pysec_http", "HTTP category. Pass url. Optional tool id.", {
-        tool: { type: "string" }, url: { type: "string" }, method: { type: "string" }, body: { type: "string" },
-      }, []),
-      fn("pysec_recon", "Recon category. Pass domain or url. Optional tool id.", {
-        tool: { type: "string" }, url: { type: "string" }, domain: { type: "string" }, host: { type: "string" },
-      }, []),
-      fn("pysec_vuln", "Vuln category. Pass url. Optional tool id.", {
-        tool: { type: "string" }, url: { type: "string" }, target: { type: "string" },
-      }, []),
-      fn("pysec_analyze", "Analyze category. Pass path, data, or url. Optional tool id.", {
-        tool: { type: "string" }, path: { type: "string" }, data: { type: "string" }, text: { type: "string" },
-      }, []),
+      fn("generate_image", "Generate an image (Pollinations, no key). prompt required.", {
+        prompt: { type: "string" }, model: { type: "string" }, size: { type: "string" }, width: { type: "number" }, height: { type: "number" },
+      }, ["prompt"]),
     ];
   }
 
@@ -30023,7 +30048,6 @@ async function handleSlash(raw) {
       "  /clearcache      wipe asset cache\n" +
       "  /clear           clear chat\n" +
       "  /todo · /plan · /stop · /reset\n" +
-      "  /pysec-init      preload security toolkit\n" +
       "  /tools           tool map\n" +
       "  /status  /term  /bash  /py",
       "sys",
@@ -30049,28 +30073,6 @@ async function handleSlash(raw) {
     if (!agentState.plan) { appendMsg("No active plan.", "sys"); return; }
     const pl = agentState.plan;
     appendMsg("PLAN: " + pl.goal + "\n" + pl.steps.map((s, i) => (i + 1) + ". [" + s.status + "] " + s.name).join("\n"), "sys");
-    return;
-  }
-  if (c === "kit" || c === "kit-status") {
-    appendMsg("Running kit_status...", "sys");
-    try { appendMsg(await toolKitStatus(), "sys"); }
-    catch (e) { appendMsg(String(e.message || e), "err"); }
-    return;
-  }
-  if (c === "pysec-init") {
-    appendMsg("Loading Pyodide security toolkit...", "sys");
-    try {
-      await ensurePysecWorker();
-      appendMsg("pyodide_security ready — agent uses pysec automatically.", "sys");
-    } catch (e) { appendMsg(String(e.message || e), "err"); }
-    return;
-  }
-  if (c === "sqlmap-setup" /* deprecated */ || c === "security-setup") {
-    appendMsg("Installing sqlmap in guest (pip/offline)...", "sys");
-    try {
-      const r = await ensureSqlmap();
-      appendMsg(JSON.stringify(r, null, 2), "sys");
-    } catch (e) { appendMsg(String(e.message || e), "err"); }
     return;
   }
   if (c === "stop" || c === "abort") {

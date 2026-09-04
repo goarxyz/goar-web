@@ -21,7 +21,6 @@ async function handleSlash(raw) {
       "  /clearcache      wipe asset cache\n" +
       "  /clear           clear chat\n" +
       "  /todo · /plan · /stop · /reset\n" +
-      "  /pysec-init      preload security toolkit\n" +
       "  /tools           tool map\n" +
       "  /status  /term  /bash  /py",
       "sys",
@@ -47,28 +46,6 @@ async function handleSlash(raw) {
     if (!agentState.plan) { appendMsg("No active plan.", "sys"); return; }
     const pl = agentState.plan;
     appendMsg("PLAN: " + pl.goal + "\n" + pl.steps.map((s, i) => (i + 1) + ". [" + s.status + "] " + s.name).join("\n"), "sys");
-    return;
-  }
-  if (c === "kit" || c === "kit-status") {
-    appendMsg("Running kit_status...", "sys");
-    try { appendMsg(await toolKitStatus(), "sys"); }
-    catch (e) { appendMsg(String(e.message || e), "err"); }
-    return;
-  }
-  if (c === "pysec-init") {
-    appendMsg("Loading Pyodide security toolkit...", "sys");
-    try {
-      await ensurePysecWorker();
-      appendMsg("pyodide_security ready — agent uses pysec automatically.", "sys");
-    } catch (e) { appendMsg(String(e.message || e), "err"); }
-    return;
-  }
-  if (c === "sqlmap-setup" /* deprecated */ || c === "security-setup") {
-    appendMsg("Installing sqlmap in guest (pip/offline)...", "sys");
-    try {
-      const r = await ensureSqlmap();
-      appendMsg(JSON.stringify(r, null, 2), "sys");
-    } catch (e) { appendMsg(String(e.message || e), "err"); }
     return;
   }
   if (c === "stop" || c === "abort") {

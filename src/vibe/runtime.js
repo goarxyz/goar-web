@@ -24,10 +24,9 @@
     const extra = [
       "",
       "## GOAR workspace",
-      "Working directory: /workspace. Scratchpad: /workspace/.scratch (session-local temp).",
-      "Python: python_exec. pip is micropip.",
-      "Security is five categories: pysec_crypto, pysec_http, pysec_recon, pysec_vuln, pysec_analyze. Pick the category and pass url/data/token/path. Optional tool id from that category. Do not list the catalog.",
-      "Firefox: browse / browser. web_fetch for bytes.",
+      "Working directory: Kali SSH. Disk /root. Persist under /root/.goar.",
+      "Python: python_exec on Kali. Shell: bash.",
+      "Firefox: browse / browser. web_fetch for bytes. Desktop: VNC. Images: generate_image.",
       "Do not list tools. Do not recap the toolkit. Do not probe. Do the task.",
     ].join("\n");
     return base + extra;
@@ -118,21 +117,9 @@
         action: { type: "string" }, url: { type: "string" }, selector: { type: "string" },
         text: { type: "string" }, js: { type: "string" }, x: { type: "number" }, y: { type: "number" }, ms: { type: "number" },
       }, ["action"]),
-      fn("pysec_crypto", "Crypto category. Pass data/token. Optional tool id.", {
-        tool: { type: "string" }, data: { type: "string" }, text: { type: "string" }, algorithm: { type: "string" }, token: { type: "string" },
-      }, []),
-      fn("pysec_http", "HTTP category. Pass url. Optional tool id.", {
-        tool: { type: "string" }, url: { type: "string" }, method: { type: "string" }, body: { type: "string" },
-      }, []),
-      fn("pysec_recon", "Recon category. Pass domain or url. Optional tool id.", {
-        tool: { type: "string" }, url: { type: "string" }, domain: { type: "string" }, host: { type: "string" },
-      }, []),
-      fn("pysec_vuln", "Vuln category. Pass url. Optional tool id.", {
-        tool: { type: "string" }, url: { type: "string" }, target: { type: "string" },
-      }, []),
-      fn("pysec_analyze", "Analyze category. Pass path, data, or url. Optional tool id.", {
-        tool: { type: "string" }, path: { type: "string" }, data: { type: "string" }, text: { type: "string" },
-      }, []),
+      fn("generate_image", "Generate an image (Pollinations, no key). prompt required.", {
+        prompt: { type: "string" }, model: { type: "string" }, size: { type: "string" }, width: { type: "number" }, height: { type: "number" },
+      }, ["prompt"]),
     ];
   }
 
