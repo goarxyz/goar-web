@@ -8,6 +8,9 @@ async function openaiChatStream({
 }) {
   const s = settingsSnapshot();
   const provider = s.provider || detectProvider(s.apiBase);
+  if (typeof isDuckProvider === "function" && isDuckProvider(provider, s.apiBase)) {
+    return duckaiChat({ messages: messages, tools: tools, includeTools: includeTools, onTextDelta: onTextDelta, signal: signal });
+  }
   if (typeof isLocalLlmProvider === "function" && isLocalLlmProvider(provider, s.apiBase)) {
     return localLlmChat({ messages, tools, includeTools, onTextDelta, onThinkingDelta });
   }

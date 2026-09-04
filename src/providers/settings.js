@@ -12,9 +12,9 @@ function loadSettings() {
       const p = typeof getProvider === "function" ? getProvider(s.provider) : null;
       const needs = typeof providerNeedsKey === "function" ? providerNeedsKey(p) : (p && p.requiresApiKey);
       if (!p || needs) {
-        s.provider = "freeai";
-        s.apiBase = "https://api.free.ai/v1";
-        if (!s.apiModel) s.apiModel = "qwen7b";
+        s.provider = "duckai";
+        s.apiBase = "https://duckduckgo.com/duckchat/v1";
+        if (!s.apiModel || s.apiModel === "qwen7b") s.apiModel = "gpt-5.4-mini";
       }
     }
     if (s.customDns == null) s.customDns = DEFAULTS.customDns || "";

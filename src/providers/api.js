@@ -37,6 +37,7 @@ function providerByBase(base) {
   if (b.includes("deepinfra.com")) return getProvider("deepinfra");
   if (b.includes("fireworks.ai")) return getProvider("fireworks");
   if (b.includes("venice.ai")) return getProvider("venice");
+  if (b.includes("duckduckgo.com") || b.includes("duck.ai") || b.includes("duckchat")) return getProvider("duckai");
   if (b.includes("11434") || b.includes("ollama")) return getProvider("ollama");
   if (b.includes("free.ai")) return getProvider("freeai");
   return getProvider("openai-compatible");
@@ -66,6 +67,7 @@ function normalizeApiBase(base, providerId) {
   // Venice
   if (/api\.venice\.ai$/i.test(b)) return b + "/api/v1";
   if (/api\.venice\.ai\/api$/i.test(b)) return b + "/v1";
+  if (/duckduckgo\.com\/duckchat/i.test(b) || /duck\.ai/i.test(b)) return "https://duckduckgo.com/duckchat/v1";
   // Gemini openai-compat
   if (/generativelanguage\.googleapis\.com\/v1beta$/i.test(b)) return b + "/openai";
   return b.replace(/\/+$/, "");
@@ -96,6 +98,7 @@ function goarUrlNeedsProxy(url) {
     if (typeof location !== "undefined" && u.origin === location.origin) return false;
     if (/cors\.manus\.space$/i.test(h)) return false;
     if (/api\.free\.ai$/i.test(h)) return false;
+    if (/duckduckgo\.com$/i.test(h) || /duck\.ai$/i.test(h)) return true;
     return u.protocol === "http:" || u.protocol === "https:";
   } catch (_) {
     return false;
@@ -148,10 +151,10 @@ const SETTINGS_KEY = "goar.workspace.settings.v7-providers";
 const LS_KEY = SETTINGS_KEY;
 
 const DEFAULTS = {
-  provider: "freeai",
+  provider: "duckai",
   wispUrl: "",
-  apiBase: "https://api.free.ai/v1",
-  apiModel: "qwen7b",
+  apiBase: "https://duckduckgo.com/duckchat/v1",
+  apiModel: "gpt-5.4-mini",
   apiKey: "",
   customDns: "",
   temperature: 0.2,

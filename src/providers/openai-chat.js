@@ -62,10 +62,19 @@ function resolveChatBody(s, messages, tools, stream, includeTools) {
     body.tool_choice = "auto";
     const provider = s.provider || detectProvider(s.apiBase);
     const base = normalizeApiBase(s.apiBase || DEFAULTS.apiBase, provider);
-    if (/openrouter|openai|groq|nvidia|together|deepseek|fireworks|deepinfra/i.test(base + provider) && !/free\.ai|freeai/i.test(base + provider)) {
+    if (/openrouter|openai|groq|nvidia|together|deepseek|fireworks|deepinfra|venice/i.test(base + provider) && !/free\.ai|freeai|duckai|duckduckgo/i.test(base + provider)) {
       body.parallel_tool_calls = false;
     }
   }
+  try {
+    if (/venice/i.test(String((s && s.provider) || "") + String((s && s.apiBase) || ""))) {
+      body.venice_parameters = {
+        include_venice_system_prompt: true,
+        enable_web_search: "auto",
+        enable_web_citations: true,
+      };
+    }
+  } catch (_) {}
   try {
     const est = Math.max(1, Math.floor(JSON.stringify(body).length / 4));
     window.__GOAR_LAST_PAYLOAD = { tokens: est, tools: (body.tools || []).length, messages: (body.messages || []).length };
@@ -81,6 +90,13 @@ function resolveChatBody(s, messages, tools, stream, includeTools) {
 async function openaiChat({ messages, tools, stream = false, includeTools = true, signal = null }) {
   const s = settingsSnapshot();
   const provider = s.provider || detectProvider(s.apiBase);
+  if (typeof isDuckProvider === "function" && isDuckProvider(provider, s.apiBase)) {
+    const r = await duckaiChat({ messages: messages, tools: tools, includeTools: includeTools, signal: signal });
+    return {
+      choices: [{ message: { role: "assistant", content: r.content || "", tool_calls: r.tool_calls || [] }, finish_reason: r.finish_reason }],
+      model: r.model,
+    };
+  }
   if (typeof isLocalLlmProvider === "function" && isLocalLlmProvider(provider, s.apiBase)) {
     const r = await localLlmChat({ messages, tools, includeTools });
     return r.raw;

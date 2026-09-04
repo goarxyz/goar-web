@@ -5,6 +5,7 @@
   "providers/api.js",
   "providers/settings.js",
   "providers/reasoning-adapter.js",
+  "providers/duckai.js",
   "providers/openai-chat.js",
   "providers/openai-stream.js",
   "providers/peak-tokens.js",
