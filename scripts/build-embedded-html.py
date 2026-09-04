@@ -26,6 +26,7 @@ css = [
     ("bridge", "src/css/goar-bridge.css"),
     ("chat", "src/css/grok-chat.css"),
     ("particles", "src/css/particles-layer.css"),
+    ("mono", "src/css/mono-jet.css"),
 ]
 js = [
     "src/vendor/xterm.js",

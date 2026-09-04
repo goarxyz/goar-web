@@ -2,10 +2,10 @@
   "use strict";
 
   const VIBE_RUNTIME = {
-    stepsPerWave: 128,
-    maxWaves: 2000,
-    maxQuiet: 12,
-    apiRetries: 10,
+    stepsPerWave: 24,
+    maxWaves: 240,
+    maxQuiet: 2,
+    apiRetries: 4,
   };
 
   function vibeIsSmallTalk(text) {
@@ -22,7 +22,7 @@
       const m = String(agentState.mission || "").toLowerCase();
       if (!m) return false;
       if (vibeIsSmallTalk(m) || (/^(hi|hey|hello|thanks|ok|okay|yo)\b/.test(m) && m.length < 24)) return false;
-      return true;
+      return /\b(explor|build|fix|implement|review|write|create|scan|test|refactor|ship|assess|audit|deploy|debug|analy|open|fetch|code|file|workspace)\b/.test(m);
     } catch (_) {
       return false;
     }
@@ -30,8 +30,8 @@
 
   function vibeLooksFinished(content) {
     const t = String(content || "").trim();
-    if (t.length < 80) return false;
-    return /\b(mission closed|task closed|nothing left to do)\b/i.test(t);
+    if (t.length < 40) return false;
+    return /\b(done|delivered|complete|finished|here'?s (what|the) (i found|result|tree|report))\b/i.test(t);
   }
 
   function vibeShouldKeepGoing(ctx) {
@@ -42,7 +42,7 @@
     const quiet = ctx.quiet || 0;
     if (quiet >= VIBE_RUNTIME.maxQuiet) return false;
     if ((ctx.toolCount || 0) > 0) return true;
-    return vibeMissionOpen() && quiet < 2;
+    return vibeMissionOpen() && quiet < 1;
   }
 
   function vibeContinueMessage(ctx) {
@@ -51,11 +51,11 @@
     try {
       if (typeof agentState !== "undefined" && agentState.todos) {
         const open = agentState.todos.filter((t) => t && !t.done).map((t) => t.text || t.title || "").filter(Boolean);
-        if (open.length) todos = " Open: " + open.slice(0, 8).join(" \u00b7 ") + ".";
+        if (open.length) todos = " Open: " + open.slice(0, 6).join(" · ") + ".";
       }
     } catch (_) {}
     return (
-      "Continue the same mission on the Kali SSH instance. Use tools. Do not recap and do not stop." + todos
+      "Continue the same mission. Use tools. Do not recap and do not stop." + todos
     );
   }
 
@@ -89,7 +89,7 @@
             }
           } catch (_) {}
         }
-        await vibeSleep(220 * Math.pow(1.6, i));
+        await vibeSleep(800 * Math.pow(2, i));
       }
     }
     throw last;
@@ -97,13 +97,9 @@
 
   try {
     if (typeof GOAR_COMPACTION !== "undefined") {
-      GOAR_COMPACTION.tokenThreshold = 28000;
-      GOAR_COMPACTION.eventRetentionSize = 48;
-      GOAR_COMPACTION.overlapSize = 8;
-      GOAR_COMPACTION.maxToolContentChars = 6000;
-      GOAR_COMPACTION.maxToolResultChars = 12000;
       GOAR_COMPACTION.stepsPerWave = VIBE_RUNTIME.stepsPerWave;
       GOAR_COMPACTION.maxWaves = VIBE_RUNTIME.maxWaves;
+      GOAR_COMPACTION.tokenThreshold = GOAR_COMPACTION.tokenThreshold || 22000;
     }
   } catch (_) {}
 

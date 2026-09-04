@@ -463,20 +463,9 @@ function formatToolOut(text) {
   try {
     const j = JSON.parse(raw);
     const ok = j.ok !== false && !j.error;
-    let title = j.tool || j.tool_id || j.action || "";
-    if (title === "discover" && Array.isArray(j.matches)) {
-      const lines = j.matches.map((m) => (m.tool || m.id || "") + (m.group ? "  " + m.group : "")).filter(Boolean);
-      return {
-        title: (j.lane && j.lane !== "all" ? j.lane + " · " : "") + lines.length + " match" + (lines.length === 1 ? "" : "es"),
-        ok: true,
-        body: (lines.join("\n") + (j.next ? "\n" + j.next : "")).slice(0, 4000),
-      };
-    }
+    let title = j.tool_id || j.agent_toolkit || j.action || "";
     if (!title || title === "tool" || title === "Output") title = "";
-    let body = j.result !== undefined ? j.result : (j.error != null ? j.error : j);
-    if (body && typeof body === "object" && body.stdout != null) {
-      body = String(body.stdout || "") + (body.stderr ? "\n" + body.stderr : "");
-    }
+    const body = j.result !== undefined ? j.result : (j.error || j);
     const pretty = typeof body === "string" ? body : JSON.stringify(body, null, 2);
     return { title: String(title), ok: ok, body: pretty.slice(0, 8000) };
   } catch (_) {
@@ -485,7 +474,10 @@ function formatToolOut(text) {
 }
 
 function isStagingProse(text) {
-  return false;
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (!t) return true;
+  if (t.length > 280) return false;
+  return /^(i(?:'ll| will)|let me|i(?:'m| am) (?:going to |about to )?|now i(?:'ll| will)|next[,:]?\s|here(?:'s| is) (?:a |the )?(?:tiny |quick |small )?|this will|i(?:'m| am) (?:now )?(?:write|creat|open|build|check|run|fetch|brows|scan|add|updat|fix|read|edit|mak))/i.test(t);
 }
 
 function lastChatRow() {
@@ -498,32 +490,6 @@ function lastChatBodyText(el) {
   if (!el) return "";
   const body = el.querySelector(".body");
   return ((body && body.textContent) || el.textContent || "").replace(/\s+/g, " ").trim();
-}
-
-function offerChatFile(path, content, filename) {
-  const name = String(filename || String(path || "file.txt").split("/").pop() || "file.txt");
-  const text = content == null ? "" : String(content);
-  if (!agentEl.chat && !document.getElementById("chat-inner")) return null;
-  const host = document.getElementById("chat-inner") || agentEl.chat;
-  const wrap = document.createElement("div");
-  wrap.className = "msg file-card";
-  const a = document.createElement("a");
-  a.className = "chat-file";
-  a.download = name;
-  try {
-    a.href = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
-  } catch (_) {
-    a.href = "data:text/plain;charset=utf-8," + encodeURIComponent(text);
-  }
-  a.textContent = "Download " + name;
-  const meta = document.createElement("div");
-  meta.className = "chat-file-meta";
-  meta.textContent = String(path || name) + " · " + text.length + " bytes";
-  wrap.appendChild(a);
-  wrap.appendChild(meta);
-  host.appendChild(wrap);
-  try { host.scrollTop = host.scrollHeight; } catch (_) {}
-  return wrap;
 }
 
 function appendMsg(text, kind = "ai") {
@@ -578,7 +544,7 @@ function appendMsg(text, kind = "ai") {
     div.appendChild(pre);
     body.textContent = text;
   } else if (kind === "tool-out") {
-    div.className = "msg tool-out";
+    div.className = "msg tool-out collapsed";
     const fold = document.createElement("button");
     fold.type = "button";
     fold.className = "fold";
@@ -712,10 +678,7 @@ function paintToolPreview(name, args, out) {
 
 /** APK GoarClient.chatStream: create once, feed onTextDelta / onThinkingDelta. */
 function beginStreamMsg(kind) {
-  if (kind === "thought") {
-    return { el: null, body: null, _noop: true };
-  }
-  const ref = appendMsg("", "ai");
+  const ref = appendMsg("", kind === "thought" ? "thought" : "ai");
   if (ref && ref.el) ref.el.classList.add("streaming");
   return ref;
 }
@@ -741,9 +704,16 @@ function streamDelta(ref, fullText) {
   ref.body.textContent = clean;
   ref._full = clean;
   try {
-    if (ref.el) {
-      ref.el.style.display = "";
-      ref.el.classList.remove("thought", "ack", "collapsed");
+    if (ref.el && ref.el.classList.contains("thought") && ref.el._fold) {
+      ref.el._fold.textContent = "Thinking";
+      ref.el.classList.add("streaming", "collapsed");
+    }
+  } catch (_) {}
+  try {
+    if (ref.el && ref.el.classList.contains("ai") && !ref.el.classList.contains("thought")) {
+      const hide = typeof isStagingProse === "function" && isStagingProse(clean);
+      ref._staging = hide;
+      ref.el.style.display = hide ? "none" : "";
     }
   } catch (_) {}
   try {
@@ -754,15 +724,18 @@ function streamDelta(ref, fullText) {
 
 function endStreamMsg(ref) {
   if (!ref || !ref.el) return;
-  ref.el.classList.remove("streaming", "ack", "thought", "collapsed");
+  ref.el.classList.remove("streaming");
   try {
     const b = ref.body && ref.body.textContent ? ref.body.textContent.trim() : "";
-    if (!b) {
+    if (!b || ref._staging || (ref.el.classList.contains("ai") && !ref.el.classList.contains("thought") && typeof isStagingProse === "function" && isStagingProse(b))) {
       ref.el.remove();
       return;
     }
-    if (ref.body.classList.contains("md") && typeof renderMd === "function") {
-      ref.body.innerHTML = renderMd(b);
+    if (ref.el.classList.contains("thought") && ref.el._fold) {
+      ref.el.classList.remove("ack");
+      const n = b.split(/\s+/).filter(Boolean).length;
+      ref.el._fold.textContent = n > 4 ? ("Thought · " + n + " words") : "Thought";
+      ref.el.classList.add("collapsed");
     }
   } catch (_) {}
 }

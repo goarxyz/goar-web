@@ -78,8 +78,7 @@ function compactToolResult(nameOrRaw, raw) {
 function pinMission(userText, opts) {
   if (typeof agentState === "undefined") return;
   const t = String(userText || "").trim();
-  if (!t || t.length < 3) return;
-  if (/^(hi|hey|hello|thanks|ok|okay|yo)\b/i.test(t)) return;
+  if (!t) return;
   if (opts && opts.force) {
     agentState.mission = t;
     return;

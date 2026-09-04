@@ -3,7 +3,7 @@ function refreshAgentTools() {
     AGENT_TOOLS = buildFullAgentTools();
   } catch (e) {
     console.warn("[goar] buildFullAgentTools", e);
-    AGENT_TOOLS = Array.isArray(GOAR_API_TOOLS) ? GOAR_API_TOOLS.slice() : [];
+    AGENT_TOOLS = typeof buildCategoryAgentTools === "function" ? buildCategoryAgentTools() : [];
   }
   try {
     window.__GOAR_TOOL_COUNT = AGENT_TOOLS.length;
@@ -14,9 +14,9 @@ function refreshAgentTools() {
     window.__GOAR_TOOL_SELECT = {
       mode: "compact",
       api: AGENT_TOOLS.length,
-      catalog: 0,
-      groups: ["bash", "write_file", "read_file", "python_exec", "browse"],
-      max: 256,
+      catalog: typeof PYSEC_TOOL_COUNT === "number" ? PYSEC_TOOL_COUNT : 141,
+      groups: ["bash", "write_file", "pysec", "browse"],
+      max: 128,
       hits: 0,
     };
   } catch (_) {}

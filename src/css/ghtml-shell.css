@@ -8,22 +8,22 @@
     }
 
     :root {
-      --bg: #0a0a0a;
-      --bg-1: #0f0f0f;
-      --bg-2: #141414;
-      --bg-3: #1a1a1a;
-      --bg-4: #222222;
-      --line: rgba(255, 255, 255, 0.10);
-      --line-soft: rgba(255, 255, 255, 0.06);
-      --red: #f5f5f5;
-      --red-dim: rgba(255, 255, 255, 0.08);
+      --bg: #050505;
+      --bg-1: #0c0c0c;
+      --bg-2: #101010;
+      --bg-3: #171717;
+      --bg-4: #1e1e1e;
+      --line: #242424;
+      --line-soft: #1a1a1a;
+      --red: #f2f2f2;
+      --red-dim: rgba(242, 242, 242, 0.08);
       --red-glow: 0 0 0 transparent;
-      --accent: #f5f5f5;
-      --accent-dim: rgba(255, 255, 255, 0.12);
-      --text: #f0f0f0;
-      --text-muted: #8a8a8a;
-      --text-dim: #555555;
-      --code-bg: #111111;
+      --accent: #f2f2f2;
+      --accent-dim: rgba(242, 242, 242, 0.10);
+      --text: #f2f2f2;
+      --text-muted: #b8b8b8;
+      --text-dim: #7c7c7c;
+      --code-bg: #0e0e0e;
       --font-ui: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
       --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
       --radius: 14px;

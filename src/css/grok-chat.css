@@ -1,22 +1,22 @@
 :root {
-  --gk-bg: #000000;
-  --gk-bg-2: #0a0a0a;
-  --gk-bg-3: #141414;
-  --gk-line: rgba(255, 255, 255, 0.08);
+  --gk-bg: #050505;
+  --gk-bg-2: #0c0c0c;
+  --gk-bg-3: #171717;
+  --gk-line: #242424;
   --gk-text: #f2f2f2;
-  --gk-muted: #8a8a8a;
-  --gk-dim: #5c5c5c;
-  --gk-user: #141414;
+  --gk-muted: #b8b8b8;
+  --gk-dim: #7c7c7c;
+  --gk-user: #161616;
   --gk-send: #f2f2f2;
   --hdr-h: 0px;
   --rail-w: 0px;
-  --bg: #000000;
-  --bg-1: #000000;
-  --bg-2: #0a0a0a;
-  --bg-3: #141414;
+  --bg: #050505;
+  --bg-1: #050505;
+  --bg-2: #0c0c0c;
+  --bg-3: #171717;
   --text: #f2f2f2;
-  --text-muted: #8a8a8a;
-  --text-dim: #5c5c5c;
+  --text-muted: #b8b8b8;
+  --text-dim: #7c7c7c;
   --font-ui: Inter, system-ui, -apple-system, sans-serif;
 }
 

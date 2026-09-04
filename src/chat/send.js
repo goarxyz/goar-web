@@ -44,13 +44,22 @@ function showTurnAck() {
     const es = document.getElementById("emptyState");
     if (es) es.classList.remove("on");
   } catch (_) {}
-  window.__GOAR_ACK = null;
+  let ref = null;
   try {
-    if (typeof setRunningUI === "function") setRunningUI(true, "working");
-    if (typeof setStatusFooter === "function") setStatusFooter("working");
-    if (typeof paintLiveWork === "function") paintLiveWork({ text: "Working" });
+    if (typeof beginStreamMsg === "function") ref = beginStreamMsg("thought");
   } catch (_) {}
-  return null;
+  if (ref && ref.el) {
+    ref.el.classList.add("ack", "streaming");
+    if (ref.el._fold) {
+      ref.el._fold.innerHTML = 'Thinking<span class="ack-dots" aria-hidden="true"><i></i><i></i><i></i></span>';
+    }
+  }
+  window.__GOAR_ACK = ref;
+  try {
+    if (typeof setRunningUI === "function") setRunningUI(true, "thinking");
+    if (typeof setStatusFooter === "function") setStatusFooter("thinking…");
+  } catch (_) {}
+  return ref;
 }
 
 async function sendCommand() {
@@ -94,12 +103,6 @@ async function sendCommand() {
     return;
   }
   appendMsg(msg, "user");
-  try {
-    document.querySelectorAll("#chat-inner .msg.thought.ack, #chat-inner .msg.thought.streaming").forEach((el) => {
-      const b = (el.querySelector(".body") || {}).textContent || "";
-      if (!String(b).trim()) el.remove();
-    });
-  } catch (_) {}
   showTurnAck();
   await agentTurn(msg);
 }

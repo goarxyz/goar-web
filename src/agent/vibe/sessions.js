@@ -142,11 +142,6 @@
     return true;
   }
 
-  function listCheckpoints(id) {
-    const item = loadStore().items.find((x) => x.id === id);
-    return (item && item.checkpoints) || [];
-  }
-
   function rewindSession(id, index) {
     const item = loadStore().items.find((x) => x.id === id);
     if (!item) return false;
@@ -200,7 +195,6 @@
   global.listSessions = listSessions;
   global.resumeSession = resumeSession;
   global.rewindSession = rewindSession;
-  global.listCheckpoints = listCheckpoints;
   global.deleteSession = deleteSession;
   global.clearAllSessions = clearAllSessions;
   global.startNewSession = startNewSession;

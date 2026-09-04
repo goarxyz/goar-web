@@ -149,7 +149,6 @@ async function agentTurn(userText) {
       }
 
       let thinkRef = null;
-      window.__GOAR_ACK = null;
       let aiRef = null;
       let thinkingFull = "";
       let textFull = "";
@@ -159,24 +158,23 @@ async function agentTurn(userText) {
         const call = () => openaiChatStream({
         messages: (agentHistory[0] && agentHistory[0].role === "system" ? [agentHistory[0]] : []).concat(agentHistory.filter((m) => m && m.role !== "system").slice(-(Number(typeof GOAR_HISTORY_WINDOW !== "undefined" ? GOAR_HISTORY_WINDOW : 64) || 64))),
         tools: getAgentTools(),
-        includeTools: true,
+        includeTools: !(step === 0 && waves === 0 && typeof vibeIsSmallTalk === "function" && vibeIsSmallTalk(userText)),
         signal: agentAbortController.signal,
         onThinkingDelta: (piece, full) => {
           thinkingFull = collapseDoubledWords(full);
-          if (!thinkRef || !thinkRef.el || !thinkRef.el.isConnected) {
-            thinkRef = beginStreamMsg("thought");
+          if (!thinkRef) {
+            thinkRef = window.__GOAR_ACK || beginStreamMsg("thought");
+            window.__GOAR_ACK = null;
           }
-          window.__GOAR_ACK = null;
           streamDelta(thinkRef, thinkingFull);
           try { syncIndicators({ phase: "thinking" }); } catch (_) {}
         },
         onTextDelta: (piece, full) => {
           textFull = collapseDoubledWords(full);
-          if (thinkRef && !(thinkingFull || "").trim()) {
-            try { endStreamMsg(thinkRef); } catch (_) {}
-            thinkRef = null;
+          if (window.__GOAR_ACK && !thinkRef) {
+            try { endStreamMsg(window.__GOAR_ACK); } catch (_) {}
+            window.__GOAR_ACK = null;
           }
-          window.__GOAR_ACK = null;
           if (!aiRef) aiRef = beginStreamMsg("ai");
           streamDelta(aiRef, textFull);
           try { syncIndicators({ phase: "streaming" }); } catch (_) {}
@@ -201,7 +199,7 @@ async function agentTurn(userText) {
         if (/model is restarting|please resend|temporarily unavailable|overloaded|try again in a few/i.test(msg)) {
           if (typeof paintLiveWork === "function") paintLiveWork({ text: "Model restarting — retrying" });
           if (typeof setStatusFooter === "function") setStatusFooter("model restarting · retrying");
-          await new Promise((r) => setTimeout(r, 400));
+          await new Promise((r) => setTimeout(r, 1800));
           continue;
         }
         if (/context.?too.?long|maximum context|prompt is too long|reduce the length/i.test(msg)) {
@@ -218,7 +216,6 @@ async function agentTurn(userText) {
 
       endStreamMsg(thinkRef);
       endStreamMsg(aiRef);
-      window.__GOAR_ACK = null;
 
       if (agentAbort) {
         const steers = typeof drainSteers === "function" ? drainSteers() : [];
@@ -241,7 +238,7 @@ async function agentTurn(userText) {
       if (!toolCalls.length && /model is restarting|please resend in a few seconds/i.test(content || thinking)) {
         if (typeof paintLiveWork === "function") paintLiveWork({ text: "Model restarting — retrying" });
         if (typeof setStatusFooter === "function") setStatusFooter("model restarting · retrying");
-        await new Promise((r) => setTimeout(r, 400));
+        await new Promise((r) => setTimeout(r, 1800));
         continue;
       }
       if (result.usage) {
@@ -254,9 +251,13 @@ async function agentTurn(userText) {
       }
 
       if (toolCalls.length || finish === "tool_calls") {
+        // Pre-tool prose is staging — never leave it in the transcript
+        if (aiRef && aiRef.el) {
+          try { aiRef.el.remove(); } catch (_) {}
+          aiRef = null;
+        }
         if (thinkRef && thinkRef.el) {
-          try { thinkRef.el.remove(); } catch (_) {}
-          thinkRef = null;
+          try { thinkRef.el.classList.add("collapsed"); } catch (_) {}
         }
 
         agentHistory.push({
@@ -305,25 +306,23 @@ async function agentTurn(userText) {
           } catch (_) {}
 
           let summary = name;
-          if (name === "bash") summary = "bash  " + String(args.command || "").slice(0, 88);
+          if (name === "bash") summary = "bash  " + String(args.command || "").slice(0, 100);
           else if (name === "write_file") summary = "write  " + (args.path || "");
           else if (name === "read_file") summary = "read  " + (args.path || "");
           else if (name === "edit_file") summary = "edit  " + (args.path || "");
-          else if (name === "python_exec") summary = "python  " + String(args.path || "inline").slice(0, 72);
-          else if (name === "grep") summary = "grep  " + String(args.pattern || "").slice(0, 72);
-          else if (name === "browse") summary = "browse  " + String(args.url || "").slice(0, 72);
-          else if (name === "audit") summary = "audit  " + String(args.url || args.target || "").slice(0, 72);
-          else if (name === "playbook") summary = String(args.playbook || "playbook") + "  " + String(args.url || args.token || args.path || "").slice(0, 56);
-          else if (name === "browser") summary = "browser  " + String(args.action || "") + (args.url ? "  " + args.url : "");
-          else if (name === "web_fetch") summary = "fetch  " + String(args.url || "").slice(0, 72);
+          else if (name === "python_exec") summary = "python  " + String(args.path || "inline").slice(0, 80);
+          else if (name === "pysec") summary = "pysec  " + String(args.tool_id || args.toolId || "").slice(0, 80);
+          else if (name === "guest_http") summary = "guest_http  " + String(args.url || "").slice(0, 80);
           else if (name === "todo") summary = "todo  " + (args.action || "list");
-          else if (name === "complete_task") summary = "done";
-          else if (name === "micropip_install") summary = "pip  " + String(args.package || "");
+          else if (name === "create_plan") summary = "plan  " + String(args.goal || "").slice(0, 80);
+          else if (name === "think") summary = "think";
+          else if (name === "complete_task") summary = "done  " + String(args.summary || "").slice(0, 80);
+          else if (name === "set_phase") summary = "phase  " + String(args.phase || "");
+          else if (name === "micropip_install") summary = "micropip  " + String(args.package || "");
           else if (name === "create_tool") summary = "create_tool  " + String(args.name || "");
-          else if (String(name).indexOf("pysec") === 0) {
-            const t = String(args.tool || args.tool_id || args.action || "").slice(0, 64);
-            summary = name.replace(/^pysec_/, "") + (t ? "  " + t : "");
-          }
+          else if (name === "kit") summary = "kit  " + String(args.action || args.tool || "").slice(0, 80);
+          else if (String(name).indexOf("pysec") === 0) summary = name + "  " + String(args.tool || args.tool_id || "").slice(0, 80);
+          else summary = name;
 
           const silent = name === "think" || name === "set_phase";
           const shownKey = silent ? "" : (summary + "\n" + JSON.stringify(args || {}).slice(0, 400));
@@ -419,10 +418,50 @@ async function agentTurn(userText) {
         continue;
       }
 
-      // Vibe: last message is assistant with no tool_calls → break
+      // Final assistant message (no tools) — natural end of this turn
       if (content && content.trim()) {
         if (!aiRef) appendMsg(content, "ai");
         agentHistory.push({ role: "assistant", content, reasoning_content: thinking || undefined });
+      } else if (toolCount > 0 && !agentAbort) {
+        try {
+          let wrapRef = null;
+          const wrap = await openaiChatStream({
+            messages: (agentHistory[0] && agentHistory[0].role === "system" ? [agentHistory[0]] : []).concat(agentHistory.filter((m) => m && m.role !== "system").slice(-(Number(typeof GOAR_HISTORY_WINDOW !== "undefined" ? GOAR_HISTORY_WINDOW : 64) || 64))).concat([
+              { role: "user", content: "Reply to the user in one or two sentences. Do not call tools." },
+            ]),
+            tools: [],
+            includeTools: false,
+            signal: agentAbortController.signal,
+            onTextDelta: (piece, full) => {
+              if (!wrapRef) wrapRef = beginStreamMsg("ai");
+              streamDelta(wrapRef, collapseDoubledWords(full));
+            },
+          });
+          endStreamMsg(wrapRef);
+          const wrapText = collapseDoubledWords((wrap && wrap.text) || "").trim();
+          if (wrapText) {
+            if (!wrapRef) appendMsg(wrapText, "ai");
+            agentHistory.push({ role: "assistant", content: wrapText });
+          }
+        } catch (_) {}
+      }
+      if (typeof runVibePostAgent === "function") {
+        const retry = await runVibePostAgent({ content: content, step: step });
+        if (retry) {
+          agentHistory.push({ role: "user", content: retry, _vibe: true });
+          continue;
+        }
+      }
+      quietStops++;
+      if (typeof vibeShouldKeepGoing === "function" && vibeShouldKeepGoing({
+        content: content, toolCount: toolCount, step: step, quiet: quietStops
+      })) {
+        agentHistory.push({
+          role: "user",
+          content: (typeof vibeContinueMessage === "function" ? vibeContinueMessage() : "Continue the same mission. Use tools."),
+          _vibe: true,
+        });
+        continue;
       }
       finishedClean = true;
       break;

@@ -1,0 +1,55 @@
+/* Jet black / off-white — last paint. No accent color. */
+:root, html, body {
+  --bg: #050505 !important;
+  --bg-1: #0c0c0c !important;
+  --bg-2: #101010 !important;
+  --bg-3: #171717 !important;
+  --bg-4: #1e1e1e !important;
+  --bg-elev: #0c0c0c;
+  --bg-input: #0e0e0e;
+  --bg-user: #161616;
+  --fg: #f2f2f2;
+  --fg-2: #b8b8b8;
+  --fg-3: #7c7c7c;
+  --fg-4: #4d4d4d;
+  --fg-inv: #050505;
+  --gk-bg: #050505 !important;
+  --gk-bg-2: #0c0c0c !important;
+  --gk-bg-3: #171717 !important;
+  --gk-text: #f2f2f2 !important;
+  --gk-muted: #b8b8b8 !important;
+  --gk-dim: #7c7c7c !important;
+  --gk-send: #f2f2f2 !important;
+  --text: #f2f2f2 !important;
+  --accent: #f2f2f2 !important;
+  --g-bg: #050505 !important;
+  --g-fg: #f2f2f2 !important;
+}
+html, body, #app, #shell, #main-stage, #setup, #chat, #scroll {
+  background: #050505 !important;
+  color: #f2f2f2 !important;
+}
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar { width: 0; height: 0; background: transparent; display: none; }
+#side-rail, #header, #composer, #input-wrap, #settings .sheet {
+  background: #0c0c0c !important;
+  border-color: #242424 !important;
+  color: #f2f2f2 !important;
+}
+#btn-send, button.primary, .send {
+  background: #f2f2f2 !important;
+  color: #050505 !important;
+  border-color: #f2f2f2 !important;
+}
+#barFill, #setup .bar > div {
+  background: #dfdede !important;
+}
+input, textarea, select {
+  background: #0e0e0e !important;
+  color: #f2f2f2 !important;
+  border-color: #242424 !important;
+}
+::selection { background: rgba(242,242,242,.18); }
