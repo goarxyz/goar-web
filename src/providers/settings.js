@@ -12,7 +12,16 @@ function loadSettings() {
       s.apiBase = "https://api.kai9000.com";
       s.apiModel = "fast";
     }
-    // First-run only. Never steal a provider the user already picked.
+    if ((s.provider === "aiand" || /aiand\.com/i.test(String(s.apiBase || ""))) && !(s.apiKey || "").trim()) {
+      s.provider = "kai9000";
+      s.apiBase = "https://api.kai9000.com";
+      if (!s.apiModel || /qwen|aiand/i.test(String(s.apiModel))) s.apiModel = "fast";
+    }
+    if (s.provider === "kai9000" || /kai9000\.com/i.test(String(s.apiBase || ""))) {
+      s.provider = "kai9000";
+      s.apiBase = "https://api.kai9000.com";
+      if (!s.apiModel) s.apiModel = "fast";
+    }
     if (!(s.apiKey || "").trim()) {
       const p = typeof getProvider === "function" ? getProvider(s.provider) : null;
       if (!s.provider || !p) {
@@ -168,8 +177,8 @@ function applyProviderPreset(id) {
   if (el.apiBase) {
     el.apiBase.value = p.apiBase || "";
     el.apiBase.disabled = !isCustom && !!p.apiBase;
-    el.apiBase.placeholder = isCustom ? "https://your-host/v1" : ((p.hideApi || p.id === "kai9000") ? "" : (p.apiBase || ""));
-    if (p.hideApi || p.id === "kai9000") el.apiBase.value = p.apiBase || el.apiBase.value;
+    el.apiBase.placeholder = isCustom ? "https://your-host/v1" : ((p.hideApi || p.id === "kai9000" || p.id === "aiand") ? "" : (p.apiBase || ""));
+    if (p.hideApi || p.id === "kai9000" || p.id === "aiand") el.apiBase.value = p.apiBase || el.apiBase.value;
   }
   const baseField = document.getElementById("apiBaseField");
   if (baseField) {
@@ -187,7 +196,7 @@ function applyProviderPreset(id) {
   // help link
   const hint = document.getElementById("providerHint");
   if (hint) {
-    const hidden = !!(p.hideApi || p.id === "kai9000");
+    const hidden = !!(p.hideApi || p.id === "kai9000" || p.id === "aiand");
     const name = hidden ? "GOAR" : (p.displayName || p.id);
     const need = hidden ? "built in" : (p.requiresApiKey && !p.supportsOptionalApiKey ? "API key required" : "API key optional");
     hint.innerHTML = "<b>" + name + "</b> · " + need +

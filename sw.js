@@ -1,4 +1,7 @@
-const CACHE = "goar-wasm-v1";
+/* GOAR root SW — Scramjet v2 (mercurywork.shop) + wasm cache */
+importScripts("/controller/controller.sw.js");
+
+const CACHE = "goar-wasm-v2";
 const HEAVY = /\.(wasm|zst)(\?|$)|python_stdlib|pyodide\.asm|gecko\.js|libcurl|epoxy-bundled|goar-box|pyodide-security/;
 
 self.addEventListener("install", (event) => {
@@ -6,54 +9,47 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil((async () => {
-    const keep = new Set([CACHE, "goar-peak-v1", "goar-assets", "goar-pyodide-v1"]);
-    const keys = await caches.keys();
-    await Promise.all(keys.filter((k) => k.startsWith("goar-") && !keep.has(k)).map((k) => caches.delete(k)));
-    await self.clients.claim();
-  })());
-});
-
-self.addEventListener("message", (event) => {
-  const msg = event.data || {};
-  if (msg.type !== "precache" || !Array.isArray(msg.urls)) return;
-  event.waitUntil((async () => {
-    const cache = await caches.open(CACHE);
-    await Promise.all(msg.urls.filter(Boolean).map(async (u) => {
-      try {
-        if (await cache.match(u)) return;
-        const res = await fetch(u, { mode: "cors", credentials: "omit" });
-        if (res && res.ok) await cache.put(u, res.clone());
-      } catch (_) {}
-    }));
-  })());
+  event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener("fetch", (event) => {
-  const req = event.request;
-  if (req.method !== "GET") return;
-  const dest = req.destination;
-  const isolate = dest === "document" || dest === "iframe" || dest === "worker" || dest === "script" || req.mode === "navigate";
-  if (isolate) {
-    event.respondWith((async () => {
-      const res = await fetch(req);
-      const h = new Headers(res.headers);
-      h.set("Cross-Origin-Embedder-Policy", "credentialless");
-      h.set("Cross-Origin-Opener-Policy", "same-origin");
-      h.set("Cross-Origin-Resource-Policy", "cross-origin");
-      return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
-    })());
+  try {
+    if ($scramjetController && $scramjetController.shouldRoute(event)) {
+      event.respondWith($scramjetController.route(event));
+      return;
+    }
+  } catch (err) {
+    event.respondWith(new Response("Scramjet SW error: " + err, { status: 502 }));
     return;
   }
-  if (!HEAVY.test(req.url)) return;
-  event.respondWith((async () => {
-    const cache = await caches.open(CACHE);
-    const hit = await cache.match(req);
-    if (hit) return hit;
-    const res = await fetch(req);
-    if (res && (res.ok || res.type === "opaque")) {
-      try { await cache.put(req, res.clone()); } catch (_) {}
-    }
-    return res;
-  })());
+  const req = event.request;
+  if (req.method === "GET" && HEAVY.test(req.url)) {
+    event.respondWith((async () => {
+      try {
+        const cache = await caches.open(CACHE);
+        const hit = await cache.match(req);
+        if (hit) return hit;
+        const res = await fetch(req);
+        if (res && res.ok) cache.put(req, res.clone());
+        return res;
+      } catch (e) {
+        return fetch(req);
+      }
+    })());
+  }
+});
+
+self.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type === "precache" && Array.isArray(data.urls)) {
+    event.waitUntil((async () => {
+      const cache = await caches.open(CACHE);
+      await Promise.all(data.urls.map(async (u) => {
+        try {
+          const res = await fetch(u);
+          if (res && res.ok) await cache.put(u, res.clone());
+        } catch (_) {}
+      }));
+    })());
+  }
 });

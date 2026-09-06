@@ -12,8 +12,10 @@
     { name: "segfault.net", href: "https://www.segfault.net", blurb: "Free SSH root servers. Join them: thc.org/ops." },
     { name: "Duck.ai", href: "https://duck.ai", blurb: "Private, no-account chat from DuckDuckGo." },
     { name: "DuckDuckGo", href: "https://duckduckgo.com", blurb: "Search." },
-    { name: "Free.ai", href: "https://free.ai", blurb: "OpenAI-compatible demo models." },
-    { name: "Pollinations", href: "https://pollinations.ai", blurb: "Image generation. No key." },
+    { name: "ai&", href: "https://aiand.com", blurb: "Open-weight chat. Free Qwen for GOAR." },
+    { name: "Pollinations", href: "https://pollinations.ai", blurb: "Free text and image generation. No key." },
+    { name: "Scramjet", href: "https://github.com/MercuryWorkshop/scramjet", blurb: "In-tab web proxy. Sites load here." },
+    { name: "Mercury Workshop", href: "https://mercurywork.shop", blurb: "Scramjet, WISP, libcurl.js, epoxy." },
     { name: "xterm.js", href: "https://xtermjs.org", blurb: "The terminal you type into." },
     { name: "sshclient-wasm", href: "https://github.com/VerdigrisTech/sshclient-wasm", blurb: "SSH in this tab." },
   ];
@@ -29,7 +31,7 @@
 
   const LICENCE = [
     "GOAR is provided as-is, without warranty, for the person using this copy.",
-    "Third-party code keeps its own licences: xterm.js (MIT), sshclient-wasm, BusyBox/WASI, Gecko WASM, Pollinations, Duck.ai, Free.ai, THC segfault.",
+    "Third-party code keeps its own licences: xterm.js (MIT), sshclient-wasm, BusyBox/WASI, Scramjet (AGPL), libcurl.js, Pollinations, Duck.ai, Free.ai, THC segfault.",
     "Kali, Pollinations, and THC services are not affiliated with GOAR. Use them under their terms.",
     "Do not use the Kali box to attack systems you do not own. THC will ban abuse; so will we by cutting the session.",
   ];

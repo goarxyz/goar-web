@@ -4,7 +4,7 @@ function registerGoarSW() {
     try {
       if (!("serviceWorker" in navigator)) return { ok: false, reason: "no-sw" };
       if (location.protocol === "file:") return { ok: false, reason: "file" };
-      const reg = await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
       return { ok: true, scope: reg.scope };
     } catch (e) {
       return { ok: false, error: String(e && e.message ? e.message : e) };

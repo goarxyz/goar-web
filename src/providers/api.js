@@ -37,10 +37,12 @@ function providerByBase(base) {
   if (b.includes("deepinfra.com")) return getProvider("deepinfra");
   if (b.includes("fireworks.ai")) return getProvider("fireworks");
   if (b.includes("venice.ai")) return getProvider("venice");
+  if (b.includes("aiand.com")) return getProvider("aiand");
   if (b.includes("kai9000.com")) return getProvider("kai9000");
   if (b.includes("duckduckgo.com") || b.includes("duck.ai") || b.includes("duckchat")) return getProvider("duckai");
   if (b.includes("11434") || b.includes("ollama")) return getProvider("ollama");
   if (b.includes("free.ai")) return getProvider("freeai");
+  if (b.includes("pollinations.ai")) return getProvider("pollinations");
   return getProvider("openai-compatible");
 }
 
@@ -68,6 +70,10 @@ function normalizeApiBase(base, providerId) {
   // Venice
   if (/api\.venice\.ai$/i.test(b)) return b + "/api/v1";
   if (/api\.venice\.ai\/api$/i.test(b)) return b + "/v1";
+  if (/api\.aiand\.com/i.test(b)) {
+    if (/\/v1$/i.test(b)) return b;
+    return "https://api.aiand.com/v1";
+  }
   if (/api\.kai9000\.com/i.test(b)) return "https://api.kai9000.com";
   if (/duckduckgo\.com\/duckchat/i.test(b) || /duck\.ai/i.test(b)) return "https://duckduckgo.com/duckchat/v1";
   // Gemini openai-compat
@@ -102,6 +108,7 @@ function goarUrlNeedsProxy(url) {
     if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0") return false;
     if (typeof location !== "undefined" && u.origin === location.origin) return false;
     if (/cors\.manus\.space$/i.test(h)) return false;
+    if (/api\.aiand\.com$/i.test(h)) return true;
     if (/api\.kai9000\.com$/i.test(h) || /kai9000\.com$/i.test(h)) return false;
     if (/text\.pollinations\.ai$/i.test(h) || /pollinations\.ai$/i.test(h)) return false;
     if (/duckduckgo\.com$/i.test(h) || /duck\.ai$/i.test(h)) return true;
@@ -124,31 +131,25 @@ async function goarApiFetch(url, init) {
 }
 
 function goarAnonId() {
-  let id = "";
-  try { id = localStorage.getItem("goar.anon.id") || ""; } catch (_) {}
-  if (!id) {
-    id = "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-    try { localStorage.setItem("goar.anon.id", id); } catch (_) {}
-  }
-  return id;
+  if (typeof goarEphemeralId === "function") return goarEphemeralId();
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
 function authHeaders(apiKey, base, providerId) {
-  const headers = { "Content-Type": "application/json" };
-  const key = (apiKey || "").trim();
-  if (key) headers.Authorization = "Bearer " + key;
   const b = (base || "").toLowerCase();
   const pid = String(providerId || "").toLowerCase();
+  const url = (base || "").trim() || "https://local";
+  const headers = (typeof goarMergeHeaders === "function")
+    ? goarMergeHeaders(url, { "Content-Type": "application/json", Accept: "application/json" })
+    : { "Content-Type": "application/json", Accept: "application/json" };
+  const key = (apiKey || "").trim();
+  if (key) headers.Authorization = "Bearer " + key;
   if (b.includes("openrouter.ai")) {
-    headers["HTTP-Referer"] = (typeof location !== "undefined" && location.origin) || "https://goar.local";
-    headers["X-Title"] = "GOAR OS";
-  }
-  if (pid === "kai9000" || b.includes("kai9000.com")) {
-    headers.Accept = headers.Accept || "application/json";
+    headers["HTTP-Referer"] = headers.Referer || headers.Origin || "https://openrouter.ai";
+    headers["X-Title"] = "chat";
   }
   if (pid === "freeai" || b.includes("free.ai")) {
     headers["X-User-Id"] = goarAnonId();
-    headers.Accept = headers.Accept || "application/json";
   }
   return headers;
 }
@@ -248,7 +249,7 @@ function detectProvider(base) {
 
 function isHiddenApiProvider(id, base) {
   const s = String(id || "") + " " + String(base || "");
-  return /kai9000/i.test(s);
+  return /kai9000|aiand/i.test(s);
 }
 
 function publicProviderName(id, base) {

@@ -42,6 +42,7 @@ function slimToolsForApi(tools) {
 function resolveMaxTokens(s) {
   const provider = String((s && s.provider) || detectProvider((s && s.apiBase) || "") || "");
   const base = String((s && s.apiBase) || "");
+  if (/kai9000/i.test(provider + base)) return 1024;
   const groq = /groq/i.test(provider + base);
   const saved = Number(s && s.maxTokens);
   const cap = groq ? 1536 : 2048;
@@ -62,13 +63,20 @@ function resolveChatBody(s, messages, tools, stream, includeTools) {
     body.tool_choice = "auto";
     const provider = s.provider || detectProvider(s.apiBase);
     const base = normalizeApiBase(s.apiBase || DEFAULTS.apiBase, provider);
-    if (/openrouter|openai|groq|nvidia|together|deepseek|fireworks|deepinfra|venice/i.test(base + provider) && !/free\.ai|freeai|duckai|duckduckgo/i.test(base + provider)) {
+    if (/openrouter|openai|groq|nvidia|together|deepseek|fireworks|deepinfra|venice|aiand/i.test(base + provider) && !/free\.ai|freeai|duckai|duckduckgo/i.test(base + provider)) {
       body.parallel_tool_calls = false;
     }
   }
   try {
     const p = typeof getProvider === "function" ? getProvider(s.provider || detectProvider(s.apiBase)) : null;
     if (p && p.supportsStreaming === false) body.stream = false;
+  } catch (_) {}
+  try {
+    if (/kai9000/i.test(String((s && s.provider) || "") + String((s && s.apiBase) || ""))) {
+      delete body.temperature;
+      delete body.max_tokens;
+      body.stream = false;
+    }
   } catch (_) {}
   try {
     if (/venice/i.test(String((s && s.provider) || "") + String((s && s.apiBase) || ""))) {
@@ -101,8 +109,20 @@ async function goarPollinationsText(messages) {
     }
   }
   if (!user) user = "Hello";
-  const prompt = "You are GOAR. Answer as GOAR, briefly.\nUser: " + user;
+  const prompt = user.slice(0, 400);
   const url = "https://text.pollinations.ai/" + encodeURIComponent(prompt);
+  if (typeof goarHostFetch === "function") {
+    try {
+      const r = await Promise.race([
+        goarHostFetch(url, { method: "GET", maxBytes: 4000 }),
+        new Promise(function (_, rej) { setTimeout(function () { rej(new Error("timeout")); }, 12000); }),
+      ]);
+      const t = String((r && r.body) || "").trim();
+      if (r && r.status >= 200 && r.status < 300 && t && !/Payment Required|All free providers/i.test(t)) {
+        return t.replace(/^GOAR:\s*/i, "").trim();
+      }
+    } catch (_) {}
+  }
   const res = await Promise.race([
     fetch(url, { method: "GET" }),
     new Promise(function (_, rej) { setTimeout(function () { rej(new Error("timeout")); }, 12000); }),
@@ -168,6 +188,10 @@ async function openaiChat({ messages, tools, stream = false, includeTools = true
       model: r.model,
     };
   }
+  if (/pollinations/i.test(String(provider) + String(s.apiBase || ""))) {
+    const text = await goarPollinationsText(messages);
+    return asChatJson(text, [], "pollinations");
+  }
   if (typeof isLocalLlmProvider === "function" && isLocalLlmProvider(provider, s.apiBase)) {
     const r = await localLlmChat({ messages, tools, includeTools });
     return r.raw;
@@ -176,15 +200,53 @@ async function openaiChat({ messages, tools, stream = false, includeTools = true
     return await openaiChatPrimary({ messages, tools, stream, includeTools, signal, s, provider });
   } catch (e) {
     const msg = String(e && e.message ? e.message : e);
-    if (/502|503|504|All free providers|timeout|Failed to fetch|network/i.test(msg) || (typeof isHiddenApiProvider === "function" && isHiddenApiProvider(provider, s.apiBase))) {
+    if (/502|503|504|401|403|All free providers|timeout|timed out|Failed to fetch|network|Auth failed/i.test(msg) || (typeof isHiddenApiProvider === "function" && isHiddenApiProvider(provider, s.apiBase))) {
       try {
         return await goarFallbackChat({ messages, tools, includeTools, signal });
       } catch (e2) {
+        if (typeof isHiddenApiProvider === "function" && isHiddenApiProvider(provider, s.apiBase)) {
+          throw new Error("GOAR is busy — send again");
+        }
         throw e;
       }
     }
     throw e;
   }
+}
+
+async function goarChatHttp(url, init) {
+  init = init || {};
+  const headers = init.headers || {};
+  const body = init.body;
+  const signal = init.signal;
+  if (typeof ensureMwFabric === "function") {
+    try { await ensureMwFabric(); } catch (_) {}
+  }
+  if (typeof goarHostFetch === "function") {
+    try {
+      const r = await goarHostFetch(url, {
+        method: init.method || "POST",
+        headers: headers,
+        body: typeof body === "string" ? body : (body != null ? JSON.stringify(body) : undefined),
+        maxBytes: 800000,
+      });
+      if (r && r.status) {
+        return new Response(r.body != null ? r.body : "", {
+          status: r.status,
+          headers: { "content-type": (r.headers && (r.headers["content-type"] || r.headers["Content-Type"])) || "application/json" },
+        });
+      }
+    } catch (e) {
+      if (e && e.name === "AbortError") throw e;
+    }
+  }
+  try {
+    const resp = await (typeof goarApiFetch === "function" ? goarApiFetch : fetch)(url, init);
+    if (resp && resp.status) return resp;
+  } catch (e) {
+    if (e && e.name === "AbortError") throw e;
+  }
+  throw new Error("network");
 }
 
 async function openaiChatPrimary({ messages, tools, stream, includeTools, signal, s, provider }) {
@@ -197,16 +259,16 @@ async function openaiChatPrimary({ messages, tools, stream, includeTools, signal
   }
   const body = resolveChatBody(s, messages, tools, stream, includeTools);
   const headers = authHeaders(s.apiKey, base, provider);
-  const maxRetries = 3;
+  const maxRetries = 1;
   let lastErr = "";
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     if (signal && signal.aborted) throw new DOMException("Aborted", "AbortError");
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 180000);
+    const timer = setTimeout(() => ctrl.abort(), /aiand|kai9000|pollinations|freeai/i.test(String(provider) + String(base)) ? 12000 : 20000);
     const onParentAbort = () => { try { ctrl.abort(); } catch (_) {} };
     if (signal) signal.addEventListener("abort", onParentAbort, { once: true });
     try {
-      const resp = await (typeof goarApiFetch === "function" ? goarApiFetch : fetch)(url, {
+      const resp = await goarChatHttp(url, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
@@ -291,7 +353,7 @@ async function fetchModels(override) {
   if (!resp.ok) {
     const body = await resp.text().catch(() => "");
     const p = typeof getProvider === "function" ? getProvider(provider) : null;
-    if (p && Array.isArray(p.preferredModels) && p.preferredModels.length && /freeai|free\.ai|kai9000/i.test(String(provider) + String(base))) {
+    if (p && Array.isArray(p.preferredModels) && p.preferredModels.length && /freeai|free\.ai|kai9000|aiand/i.test(String(provider) + String(base))) {
       return p.preferredModels.slice();
     }
     throw new Error("models HTTP " + resp.status + (body ? " · " + body.slice(0, 160) : ""));

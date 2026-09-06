@@ -10413,6 +10413,181 @@ try {
 </script>
 
 <!-- ====================================================================== -->
+<!-- JS / identity.js -->
+<!-- ====================================================================== -->
+
+<script data-src="src/net/identity.js">
+/**
+ * Per-hop browser identity. Nothing persistent, nothing GOAR-named.
+ * Used by chat, Duck, Scramjet, and host fetch so free providers
+ * do not see a fixed client fingerprint.
+ */
+(function (global) {
+  "use strict";
+
+  const CHROME = [120, 124, 128, 131, 136, 139, 140, 141];
+  const OS = [
+    "Windows NT 10.0; Win64; x64",
+    "Windows NT 11.0; Win64; x64",
+    "Macintosh; Intel Mac OS X 10_15_7",
+    "Macintosh; Intel Mac OS X 13_6_0",
+    "X11; Linux x86_64",
+    "X11; Ubuntu; Linux x86_64",
+    "Linux; Android 14; Pixel 8",
+    "Linux; Android 13; SM-S918B",
+    "Linux; Android 15; Pixel 9",
+  ];
+  const LANGS = [
+    "en-US,en;q=0.9",
+    "en-GB,en;q=0.9",
+    "en-AU,en;q=0.9,en;q=0.8",
+    "en-US,en;q=0.9,id;q=0.8",
+    "en-US,en;q=0.8,es;q=0.5",
+  ];
+  const BRANDS = [
+    function (v) { return "\"Google Chrome\";v=\"" + v + "\", \"Chromium\";v=\"" + v + "\", \"Not=A?Brand\";v=\"24\""; },
+    function (v) { return "\"Chromium\";v=\"" + v + "\", \"Not.A/Brand\";v=\"99\", \"Google Chrome\";v=\"" + v + "\""; },
+    function (v) { return "\"Not=A?Brand\";v=\"99\", \"Android WebView\";v=\"" + v + "\", \"Chromium\";v=\"" + v + "\""; },
+    function (v) { return "\"Microsoft Edge\";v=\"" + v + "\", \"Chromium\";v=\"" + v + "\", \"Not:A-Brand\";v=\"24\""; },
+  ];
+  const PACKAGES = [
+    "",
+    "com.android.chrome",
+    "com.android.browser",
+    "com.google.android.webview",
+    "org.mozilla.firefox",
+  ];
+  const PATHS = ["/", "/chat", "/app", "/c", "/new", "/"];
+
+  function pick(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  function nonce(n) {
+    n = n || 8;
+    try {
+      const a = new Uint8Array(n);
+      (global.crypto || crypto).getRandomValues(a);
+      let s = "";
+      for (let i = 0; i < a.length; i++) s += a[i].toString(16).padStart(2, "0");
+      return s;
+    } catch (_) {
+      return Math.random().toString(36).slice(2) + Date.now().toString(36);
+    }
+  }
+
+  function chromeVer() {
+    return pick(CHROME);
+  }
+
+  function userAgent() {
+    const v = chromeVer();
+    const os = pick(OS);
+    if (/Android/.test(os)) {
+      return "Mozilla/5.0 (" + os + ") AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + v + ".0.0.0 Mobile Safari/537.36";
+    }
+    return "Mozilla/5.0 (" + os + ") AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + v + ".0.0.0 Safari/537.36";
+  }
+
+  function platformFromUa(ua) {
+    if (/Android/.test(ua)) return "\"Android\"";
+    if (/Mac OS X/.test(ua)) return "\"macOS\"";
+    if (/Windows/.test(ua)) return "\"Windows\"";
+    return "\"Linux\"";
+  }
+
+  function originForHost(host) {
+    host = String(host || "").toLowerCase();
+    if (!host) return "";
+    if (/kai9000/.test(host)) {
+      return pick(["https://kai9000.com", "https://www.kai9000.com", "https://kai9000.com"]);
+    }
+    if (/duckduckgo\.com|duck\.ai/.test(host)) {
+      return pick(["https://duckduckgo.com", "https://duck.ai"]);
+    }
+    if (/pollinations/.test(host)) return "https://pollinations.ai";
+    if (/free\.ai/.test(host)) return pick(["https://free.ai", "https://www.free.ai"]);
+    if (/aiand\.com/.test(host)) return "https://aiand.com";
+    if (/openrouter\.ai/.test(host)) return "https://openrouter.ai";
+    try { return "https://" + host.replace(/^www\./, ""); } catch (_) { return ""; }
+  }
+
+  function refererFor(origin) {
+    if (!origin) return "";
+    const path = pick(PATHS);
+    const q = Math.random() < 0.4 ? ("?v=" + nonce(3)) : "";
+    return origin.replace(/\/+$/, "") + path + q;
+  }
+
+  function goarBrowserHeaders(url) {
+    let host = "";
+    try { host = new URL(String(url || ""), "https://local").hostname; } catch (_) {}
+    const ua = userAgent();
+    const v = (ua.match(/Chrome\/(\d+)/) || [])[1] || String(chromeVer());
+    const origin = originForHost(host);
+    const mobile = /Mobile/.test(ua);
+    const h = {
+      "User-Agent": ua,
+      Accept: "application/json, text/plain, */*",
+      "Accept-Language": pick(LANGS),
+      "sec-ch-ua": pick(BRANDS)(v),
+      "sec-ch-ua-mobile": mobile ? "?1" : "?0",
+      "sec-ch-ua-platform": platformFromUa(ua),
+    };
+    if (origin) {
+      h.Origin = origin;
+      h.Referer = refererFor(origin);
+    }
+    if (mobile && Math.random() < 0.5) {
+      const pkg = pick(PACKAGES);
+      if (pkg) h["X-Requested-With"] = pkg;
+    }
+    return h;
+  }
+
+  function goarMergeHeaders(url, extra) {
+    const base = goarBrowserHeaders(url);
+    const out = Object.assign({}, base);
+    extra = extra || {};
+    Object.keys(extra).forEach(function (k) {
+      if (extra[k] == null || extra[k] === "") return;
+      out[k] = extra[k];
+    });
+    return out;
+  }
+
+  let _ephemeral = "";
+  let _ephemeralAt = 0;
+  function goarEphemeralId() {
+    const now = Date.now();
+    if (!_ephemeral || now - _ephemeralAt > 4 * 60 * 1000) {
+      _ephemeral = nonce(12);
+      _ephemeralAt = now;
+      try { localStorage.removeItem("goar.anon.id"); } catch (_) {}
+    }
+    return _ephemeral;
+  }
+
+  function goarFeVersion() {
+    const d = new Date();
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    const hh = String(d.getUTCHours()).padStart(2, "0");
+    const mm = String(d.getUTCMinutes()).padStart(2, "0");
+    const ss = String(d.getUTCSeconds()).padStart(2, "0");
+    return "serp_" + y + m + day + "_" + hh + mm + ss + "_ET-" + nonce(10);
+  }
+
+  try { global.goarBrowserHeaders = goarBrowserHeaders; } catch (_) {}
+  try { global.goarMergeHeaders = goarMergeHeaders; } catch (_) {}
+  try { global.goarEphemeralId = goarEphemeralId; } catch (_) {}
+  try { global.goarFeVersion = goarFeVersion; } catch (_) {}
+  try { global.goarNonce = nonce; } catch (_) {}
+})(typeof window !== "undefined" ? window : this);
+</script>
+
+<!-- ====================================================================== -->
 <!-- JS / immobiliser.js -->
 <!-- ====================================================================== -->
 
@@ -10628,6 +10803,23 @@ const SERVICE_PROVIDERS = [
     chatModelTypes: ["chat", "code"],
   },
   {
+    id: "aiand",
+    displayName: "GOAR",
+    requiresApiKey: false,
+    supportsOptionalApiKey: true,
+    noKeyDemo: true,
+    defaultModel: "qwen/qwen3.6-27b",
+    apiBase: "https://api.aiand.com/v1",
+    apiKeyUrl: "",
+    placeholder: "built in — no key",
+    hideApi: true,
+    supportsTools: true,
+    supportsStreaming: true,
+    contextWindowTokens: 262144,
+    chatModelTypes: ["chat", "code"],
+    preferredModels: ["qwen/qwen3.6-27b", "openai/gpt-oss-120b", "deepseek-ai/deepseek-v4-flash"],
+  },
+  {
     id: "kai9000",
     displayName: "GOAR",
     requiresApiKey: false,
@@ -10659,6 +10851,22 @@ const SERVICE_PROVIDERS = [
     contextWindowTokens: 32000,
     chatModelTypes: ["chat", "code"],
     preferredModels: ["gpt-5.4-mini", "gpt-5.6-luna", "claude-haiku-4-5", "mistral-small-2603", "tinfoil/gpt-oss-120b", "tinfoil/gemma4-31b"],
+  },
+  {
+    id: "pollinations",
+    displayName: "Pollinations (free)",
+    requiresApiKey: false,
+    supportsOptionalApiKey: true,
+    noKeyDemo: true,
+    defaultModel: "openai",
+    apiBase: "https://text.pollinations.ai",
+    apiKeyUrl: "https://pollinations.ai",
+    placeholder: "no key — text + images",
+    supportsTools: false,
+    supportsStreaming: false,
+    contextWindowTokens: 8000,
+    chatModelTypes: ["chat"],
+    preferredModels: ["openai", "openai-fast"],
   },
   {
     id: "freeai",
@@ -10945,10 +11153,12 @@ function providerByBase(base) {
   if (b.includes("deepinfra.com")) return getProvider("deepinfra");
   if (b.includes("fireworks.ai")) return getProvider("fireworks");
   if (b.includes("venice.ai")) return getProvider("venice");
+  if (b.includes("aiand.com")) return getProvider("aiand");
   if (b.includes("kai9000.com")) return getProvider("kai9000");
   if (b.includes("duckduckgo.com") || b.includes("duck.ai") || b.includes("duckchat")) return getProvider("duckai");
   if (b.includes("11434") || b.includes("ollama")) return getProvider("ollama");
   if (b.includes("free.ai")) return getProvider("freeai");
+  if (b.includes("pollinations.ai")) return getProvider("pollinations");
   return getProvider("openai-compatible");
 }
 
@@ -10976,6 +11186,10 @@ function normalizeApiBase(base, providerId) {
   // Venice
   if (/api\.venice\.ai$/i.test(b)) return b + "/api/v1";
   if (/api\.venice\.ai\/api$/i.test(b)) return b + "/v1";
+  if (/api\.aiand\.com/i.test(b)) {
+    if (/\/v1$/i.test(b)) return b;
+    return "https://api.aiand.com/v1";
+  }
   if (/api\.kai9000\.com/i.test(b)) return "https://api.kai9000.com";
   if (/duckduckgo\.com\/duckchat/i.test(b) || /duck\.ai/i.test(b)) return "https://duckduckgo.com/duckchat/v1";
   // Gemini openai-compat
@@ -11010,6 +11224,7 @@ function goarUrlNeedsProxy(url) {
     if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0") return false;
     if (typeof location !== "undefined" && u.origin === location.origin) return false;
     if (/cors\.manus\.space$/i.test(h)) return false;
+    if (/api\.aiand\.com$/i.test(h)) return true;
     if (/api\.kai9000\.com$/i.test(h) || /kai9000\.com$/i.test(h)) return false;
     if (/text\.pollinations\.ai$/i.test(h) || /pollinations\.ai$/i.test(h)) return false;
     if (/duckduckgo\.com$/i.test(h) || /duck\.ai$/i.test(h)) return true;
@@ -11032,31 +11247,25 @@ async function goarApiFetch(url, init) {
 }
 
 function goarAnonId() {
-  let id = "";
-  try { id = localStorage.getItem("goar.anon.id") || ""; } catch (_) {}
-  if (!id) {
-    id = "g" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-    try { localStorage.setItem("goar.anon.id", id); } catch (_) {}
-  }
-  return id;
+  if (typeof goarEphemeralId === "function") return goarEphemeralId();
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
 function authHeaders(apiKey, base, providerId) {
-  const headers = { "Content-Type": "application/json" };
-  const key = (apiKey || "").trim();
-  if (key) headers.Authorization = "Bearer " + key;
   const b = (base || "").toLowerCase();
   const pid = String(providerId || "").toLowerCase();
+  const url = (base || "").trim() || "https://local";
+  const headers = (typeof goarMergeHeaders === "function")
+    ? goarMergeHeaders(url, { "Content-Type": "application/json", Accept: "application/json" })
+    : { "Content-Type": "application/json", Accept: "application/json" };
+  const key = (apiKey || "").trim();
+  if (key) headers.Authorization = "Bearer " + key;
   if (b.includes("openrouter.ai")) {
-    headers["HTTP-Referer"] = (typeof location !== "undefined" && location.origin) || "https://goar.local";
-    headers["X-Title"] = "GOAR OS";
-  }
-  if (pid === "kai9000" || b.includes("kai9000.com")) {
-    headers.Accept = headers.Accept || "application/json";
+    headers["HTTP-Referer"] = headers.Referer || headers.Origin || "https://openrouter.ai";
+    headers["X-Title"] = "chat";
   }
   if (pid === "freeai" || b.includes("free.ai")) {
     headers["X-User-Id"] = goarAnonId();
-    headers.Accept = headers.Accept || "application/json";
   }
   return headers;
 }
@@ -11156,7 +11365,7 @@ function detectProvider(base) {
 
 function isHiddenApiProvider(id, base) {
   const s = String(id || "") + " " + String(base || "");
-  return /kai9000/i.test(s);
+  return /kai9000|aiand/i.test(s);
 }
 
 function publicProviderName(id, base) {
@@ -11192,7 +11401,16 @@ function loadSettings() {
       s.apiBase = "https://api.kai9000.com";
       s.apiModel = "fast";
     }
-    // First-run only. Never steal a provider the user already picked.
+    if ((s.provider === "aiand" || /aiand\.com/i.test(String(s.apiBase || ""))) && !(s.apiKey || "").trim()) {
+      s.provider = "kai9000";
+      s.apiBase = "https://api.kai9000.com";
+      if (!s.apiModel || /qwen|aiand/i.test(String(s.apiModel))) s.apiModel = "fast";
+    }
+    if (s.provider === "kai9000" || /kai9000\.com/i.test(String(s.apiBase || ""))) {
+      s.provider = "kai9000";
+      s.apiBase = "https://api.kai9000.com";
+      if (!s.apiModel) s.apiModel = "fast";
+    }
     if (!(s.apiKey || "").trim()) {
       const p = typeof getProvider === "function" ? getProvider(s.provider) : null;
       if (!s.provider || !p) {
@@ -11348,8 +11566,8 @@ function applyProviderPreset(id) {
   if (el.apiBase) {
     el.apiBase.value = p.apiBase || "";
     el.apiBase.disabled = !isCustom && !!p.apiBase;
-    el.apiBase.placeholder = isCustom ? "https://your-host/v1" : ((p.hideApi || p.id === "kai9000") ? "" : (p.apiBase || ""));
-    if (p.hideApi || p.id === "kai9000") el.apiBase.value = p.apiBase || el.apiBase.value;
+    el.apiBase.placeholder = isCustom ? "https://your-host/v1" : ((p.hideApi || p.id === "kai9000" || p.id === "aiand") ? "" : (p.apiBase || ""));
+    if (p.hideApi || p.id === "kai9000" || p.id === "aiand") el.apiBase.value = p.apiBase || el.apiBase.value;
   }
   const baseField = document.getElementById("apiBaseField");
   if (baseField) {
@@ -11367,7 +11585,7 @@ function applyProviderPreset(id) {
   // help link
   const hint = document.getElementById("providerHint");
   if (hint) {
-    const hidden = !!(p.hideApi || p.id === "kai9000");
+    const hidden = !!(p.hideApi || p.id === "kai9000" || p.id === "aiand");
     const name = hidden ? "GOAR" : (p.displayName || p.id);
     const need = hidden ? "built in" : (p.requiresApiKey && !p.supportsOptionalApiKey ? "API key required" : "API key optional");
     hint.innerHTML = "<b>" + name + "</b> · " + need +
@@ -11565,8 +11783,6 @@ try {
   const STATUS = ORIGIN + "/duckchat/v1/status";
   const CHAT = ORIGIN + "/duckchat/v1/chat";
   const MODELS = ORIGIN + "/duckchat/v1/models";
-  const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
-  const FE_VERSION = "serp_20250710_090702_ET-70eaca6aea2948b0bb60";
   const FREE_MODELS = [
     "gpt-5.4-mini",
     "gpt-5.6-luna",
@@ -11615,15 +11831,26 @@ try {
   }
 
   function duckHeaders(extra) {
-    return Object.assign({
-      "User-Agent": UA,
-      Accept: "text/event-stream, application/json",
-      "Accept-Language": "en-US,en;q=0.9",
-      Referer: "https://duck.ai/",
-      Origin: ORIGIN,
-      "x-vqd-accept": "1",
-      "x-fe-version": FE_VERSION,
-    }, extra || {});
+    const url = CHAT;
+    const dyn = typeof goarMergeHeaders === "function"
+      ? goarMergeHeaders(url, {
+          Accept: "text/event-stream, application/json",
+          "x-vqd-accept": "1",
+          "x-fe-version": typeof goarFeVersion === "function" ? goarFeVersion() : ("serp_" + Date.now()),
+        })
+      : {
+          "User-Agent": typeof navigator !== "undefined" ? navigator.userAgent : "Mozilla/5.0",
+          Accept: "text/event-stream, application/json",
+          "Accept-Language": "en-US,en;q=0.9",
+          Referer: pickDuckOrigin() + "/",
+          Origin: pickDuckOrigin(),
+          "x-vqd-accept": "1",
+        };
+    return Object.assign({}, dyn, extra || {});
+  }
+
+  function pickDuckOrigin() {
+    return Math.random() < 0.5 ? "https://duckduckgo.com" : "https://duck.ai";
   }
 
   function asResponse(status, headersObj, body, via) {
@@ -12254,6 +12481,7 @@ function slimToolsForApi(tools) {
 function resolveMaxTokens(s) {
   const provider = String((s && s.provider) || detectProvider((s && s.apiBase) || "") || "");
   const base = String((s && s.apiBase) || "");
+  if (/kai9000/i.test(provider + base)) return 1024;
   const groq = /groq/i.test(provider + base);
   const saved = Number(s && s.maxTokens);
   const cap = groq ? 1536 : 2048;
@@ -12274,13 +12502,20 @@ function resolveChatBody(s, messages, tools, stream, includeTools) {
     body.tool_choice = "auto";
     const provider = s.provider || detectProvider(s.apiBase);
     const base = normalizeApiBase(s.apiBase || DEFAULTS.apiBase, provider);
-    if (/openrouter|openai|groq|nvidia|together|deepseek|fireworks|deepinfra|venice/i.test(base + provider) && !/free\.ai|freeai|duckai|duckduckgo/i.test(base + provider)) {
+    if (/openrouter|openai|groq|nvidia|together|deepseek|fireworks|deepinfra|venice|aiand/i.test(base + provider) && !/free\.ai|freeai|duckai|duckduckgo/i.test(base + provider)) {
       body.parallel_tool_calls = false;
     }
   }
   try {
     const p = typeof getProvider === "function" ? getProvider(s.provider || detectProvider(s.apiBase)) : null;
     if (p && p.supportsStreaming === false) body.stream = false;
+  } catch (_) {}
+  try {
+    if (/kai9000/i.test(String((s && s.provider) || "") + String((s && s.apiBase) || ""))) {
+      delete body.temperature;
+      delete body.max_tokens;
+      body.stream = false;
+    }
   } catch (_) {}
   try {
     if (/venice/i.test(String((s && s.provider) || "") + String((s && s.apiBase) || ""))) {
@@ -12313,8 +12548,20 @@ async function goarPollinationsText(messages) {
     }
   }
   if (!user) user = "Hello";
-  const prompt = "You are GOAR. Answer as GOAR, briefly.\nUser: " + user;
+  const prompt = user.slice(0, 400);
   const url = "https://text.pollinations.ai/" + encodeURIComponent(prompt);
+  if (typeof goarHostFetch === "function") {
+    try {
+      const r = await Promise.race([
+        goarHostFetch(url, { method: "GET", maxBytes: 4000 }),
+        new Promise(function (_, rej) { setTimeout(function () { rej(new Error("timeout")); }, 12000); }),
+      ]);
+      const t = String((r && r.body) || "").trim();
+      if (r && r.status >= 200 && r.status < 300 && t && !/Payment Required|All free providers/i.test(t)) {
+        return t.replace(/^GOAR:\s*/i, "").trim();
+      }
+    } catch (_) {}
+  }
   const res = await Promise.race([
     fetch(url, { method: "GET" }),
     new Promise(function (_, rej) { setTimeout(function () { rej(new Error("timeout")); }, 12000); }),
@@ -12380,6 +12627,10 @@ async function openaiChat({ messages, tools, stream = false, includeTools = true
       model: r.model,
     };
   }
+  if (/pollinations/i.test(String(provider) + String(s.apiBase || ""))) {
+    const text = await goarPollinationsText(messages);
+    return asChatJson(text, [], "pollinations");
+  }
   if (typeof isLocalLlmProvider === "function" && isLocalLlmProvider(provider, s.apiBase)) {
     const r = await localLlmChat({ messages, tools, includeTools });
     return r.raw;
@@ -12388,15 +12639,53 @@ async function openaiChat({ messages, tools, stream = false, includeTools = true
     return await openaiChatPrimary({ messages, tools, stream, includeTools, signal, s, provider });
   } catch (e) {
     const msg = String(e && e.message ? e.message : e);
-    if (/502|503|504|All free providers|timeout|Failed to fetch|network/i.test(msg) || (typeof isHiddenApiProvider === "function" && isHiddenApiProvider(provider, s.apiBase))) {
+    if (/502|503|504|401|403|All free providers|timeout|timed out|Failed to fetch|network|Auth failed/i.test(msg) || (typeof isHiddenApiProvider === "function" && isHiddenApiProvider(provider, s.apiBase))) {
       try {
         return await goarFallbackChat({ messages, tools, includeTools, signal });
       } catch (e2) {
+        if (typeof isHiddenApiProvider === "function" && isHiddenApiProvider(provider, s.apiBase)) {
+          throw new Error("GOAR is busy — send again");
+        }
         throw e;
       }
     }
     throw e;
   }
+}
+
+async function goarChatHttp(url, init) {
+  init = init || {};
+  const headers = init.headers || {};
+  const body = init.body;
+  const signal = init.signal;
+  if (typeof ensureMwFabric === "function") {
+    try { await ensureMwFabric(); } catch (_) {}
+  }
+  if (typeof goarHostFetch === "function") {
+    try {
+      const r = await goarHostFetch(url, {
+        method: init.method || "POST",
+        headers: headers,
+        body: typeof body === "string" ? body : (body != null ? JSON.stringify(body) : undefined),
+        maxBytes: 800000,
+      });
+      if (r && r.status) {
+        return new Response(r.body != null ? r.body : "", {
+          status: r.status,
+          headers: { "content-type": (r.headers && (r.headers["content-type"] || r.headers["Content-Type"])) || "application/json" },
+        });
+      }
+    } catch (e) {
+      if (e && e.name === "AbortError") throw e;
+    }
+  }
+  try {
+    const resp = await (typeof goarApiFetch === "function" ? goarApiFetch : fetch)(url, init);
+    if (resp && resp.status) return resp;
+  } catch (e) {
+    if (e && e.name === "AbortError") throw e;
+  }
+  throw new Error("network");
 }
 
 async function openaiChatPrimary({ messages, tools, stream, includeTools, signal, s, provider }) {
@@ -12409,16 +12698,16 @@ async function openaiChatPrimary({ messages, tools, stream, includeTools, signal
   }
   const body = resolveChatBody(s, messages, tools, stream, includeTools);
   const headers = authHeaders(s.apiKey, base, provider);
-  const maxRetries = 3;
+  const maxRetries = 1;
   let lastErr = "";
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     if (signal && signal.aborted) throw new DOMException("Aborted", "AbortError");
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 180000);
+    const timer = setTimeout(() => ctrl.abort(), /aiand|kai9000|pollinations|freeai/i.test(String(provider) + String(base)) ? 12000 : 20000);
     const onParentAbort = () => { try { ctrl.abort(); } catch (_) {} };
     if (signal) signal.addEventListener("abort", onParentAbort, { once: true });
     try {
-      const resp = await (typeof goarApiFetch === "function" ? goarApiFetch : fetch)(url, {
+      const resp = await goarChatHttp(url, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
@@ -12503,7 +12792,7 @@ async function fetchModels(override) {
   if (!resp.ok) {
     const body = await resp.text().catch(() => "");
     const p = typeof getProvider === "function" ? getProvider(provider) : null;
-    if (p && Array.isArray(p.preferredModels) && p.preferredModels.length && /freeai|free\.ai|kai9000/i.test(String(provider) + String(base))) {
+    if (p && Array.isArray(p.preferredModels) && p.preferredModels.length && /freeai|free\.ai|kai9000|aiand/i.test(String(provider) + String(base))) {
       return p.preferredModels.slice();
     }
     throw new Error("models HTTP " + resp.status + (body ? " · " + body.slice(0, 160) : ""));
@@ -12758,7 +13047,7 @@ async function openaiChatStream({
 
   let resp;
   try {
-    resp = await (typeof goarApiFetch === "function" ? goarApiFetch : fetch)(url, {
+    resp = await (typeof goarChatHttp === "function" ? goarChatHttp : (typeof goarApiFetch === "function" ? goarApiFetch : fetch))(url, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -12779,13 +13068,8 @@ async function openaiChatStream({
     // try parse error then fallback
     if (!resp.ok) {
       const errText = await resp.text().catch(() => "");
-      if (resp.status === 401 || resp.status === 403) {
-        throw new Error("Auth failed (" + resp.status + "): " + errText.slice(0, 200));
-      }
       if (/model is restarting|please resend|temporarily unavailable|overloaded/i.test(errText) || resp.status === 503) {
         await new Promise((r) => setTimeout(r, 1800));
-        const data = await openaiChat({ messages, tools, stream: false, includeTools, signal });
-        return normalizeChatResultFromJson(data, onTextDelta, onThinkingDelta);
       }
     }
     try {
@@ -13782,7 +14066,7 @@ function fillProviderSelect(sel, selected) {
   list.forEach((p) => {
     const o = document.createElement("option");
     o.value = p.id;
-    o.textContent = (p.hideApi || p.id === "kai9000")
+    o.textContent = (p.hideApi || p.id === "kai9000" || p.id === "aiand")
       ? "GOAR"
       : (typeof publicProviderName === "function" ? publicProviderName(p.id) : (p.displayName || p.id));
     sel.appendChild(o);
@@ -13888,7 +14172,7 @@ function applyCredProvider() {
   const hint = document.querySelector("#credPhase .hint");
   if (hint) {
     hint.textContent = noKey
-      ? ((prov && (prov.hideApi || prov.id === "kai9000")) ? "GOAR is ready — no key" : "No key needed · switch provider anytime")
+      ? ((prov && (prov.hideApi || prov.id === "kai9000" || prov.id === "aiand")) ? "GOAR is ready — no key" : "No key needed · switch provider anytime")
       : "Provider + API key · models load live from your API";
   }
 }
@@ -15785,30 +16069,24 @@ async function goarHostFetch(url, opts) {
   }
   const maxBytes = Math.min(Number(opts.maxBytes) || 250000, 2_000_000);
   const body = opts.body != null ? String(opts.body) : undefined;
+  if (typeof goarMergeHeaders === "function" && !opts.rawHeaders) {
+    headers = goarMergeHeaders(url, headers);
+  }
+
+  if (typeof scramjetBareFetch === "function") {
+    try {
+      const sj = await scramjetBareFetch(url, { method, headers, body, maxBytes });
+      if (sj && sj.status) {
+        sj.ms = Math.round(performance.now() - t0);
+        return sj;
+      }
+    } catch (e) {
+      MW_FABRIC.lastError = String(e && e.message ? e.message : e);
+    }
+  }
 
   if (!MW_FABRIC.ready) {
     try { await ensureMwFabric(); } catch (_) {}
-  }
-
-  try {
-    const man = await manusHttpFetch(url, {
-      method,
-      headers,
-      body,
-      render: opts.render,
-      extract: opts.extract,
-      selector: opts.selector,
-      ttl: opts.ttl,
-      input: opts.input,
-      output: opts.output,
-    });
-    if (man && man.ok && (man.body || man.status)) {
-      man.body = String(man.body || "").slice(0, maxBytes);
-      man.ms = Math.round(performance.now() - t0);
-      return man;
-    }
-  } catch (e) {
-    MW_FABRIC.lastError = String(e && e.message ? e.message : e);
   }
 
   if (MW_FABRIC.engine === "libcurl" && MW_FABRIC.libcurl) {
@@ -15838,6 +16116,27 @@ async function goarHostFetch(url, opts) {
       console.warn("[goar] libcurl fetch fail", e);
       MW_FABRIC.lastError = String(e.message || e);
     }
+  }
+
+  try {
+    const man = await manusHttpFetch(url, {
+      method,
+      headers,
+      body,
+      render: opts.render,
+      extract: opts.extract,
+      selector: opts.selector,
+      ttl: opts.ttl,
+      input: opts.input,
+      output: opts.output,
+    });
+    if (man && man.ok && (man.body || man.status)) {
+      man.body = String(man.body || "").slice(0, maxBytes);
+      man.ms = Math.round(performance.now() - t0);
+      return man;
+    }
+  } catch (e) {
+    MW_FABRIC.lastError = String(e && e.message ? e.message : e);
   }
 
   if (MW_FABRIC.engine === "epoxy" && MW_FABRIC.epoxy) {
@@ -16589,7 +16888,7 @@ try { window.goarLoopbackFetch = goarLoopbackFetch; } catch (_) {}
       const s = localStorage.getItem("goar_wisp_url");
       if (s) return s;
     } catch (_) {}
-    return "wss://cors.manus.space/wisp/";
+    return "wss://wisp.mercurywork.shop/";
   }
 
   /* ── WISP mux ────────────────────────────────────── */
@@ -16622,6 +16921,7 @@ try { window.goarLoopbackFetch = goarLoopbackFetch; } catch (_) {}
       if (saved) push(saved);
     } catch (_) {}
     push("wss://wisp.mercurywork.shop/");
+    push("wss://cors.manus.space/wisp/");
     return pool;
   }
 
@@ -20996,6 +21296,193 @@ try {
 </script>
 
 <!-- ====================================================================== -->
+<!-- JS / scramjet-plane.js -->
+<!-- ====================================================================== -->
+
+<script data-src="src/net/scramjet-plane.js">
+/**
+ * Scramjet v2 — same stack as https://scramjet.mercurywork.shop/
+ * scramjet.js + controller.api.js + libcurl-transport over WISP
+ */
+(function (global) {
+  "use strict";
+
+  const SJ = {
+    ready: false,
+    loading: null,
+    controller: null,
+    frame: null,
+    lastError: "",
+    lastUrl: "",
+    transport: "",
+  };
+
+  function withTimeout(promise, ms, label) {
+    return new Promise(function (resolve, reject) {
+      const t = setTimeout(function () { reject(new Error(label + " timeout")); }, ms);
+      Promise.resolve(promise).then(
+        function (v) { clearTimeout(t); resolve(v); },
+        function (e) { clearTimeout(t); reject(e); }
+      );
+    });
+  }
+
+  function wispUrl() {
+    try {
+      if (typeof resolveGeckoWisp === "function") {
+        const u = resolveGeckoWisp();
+        if (u) return u.endsWith("/") ? u : u + "/";
+      }
+    } catch (_) {}
+    return "wss://wisp.mercurywork.shop/";
+  }
+
+  function loadScript(src) {
+    return new Promise(function (resolve, reject) {
+      if (document.querySelector('script[data-sj="' + src + '"]')) {
+        resolve(true);
+        return;
+      }
+      const s = document.createElement("script");
+      s.src = src;
+      s.async = false;
+      s.setAttribute("data-sj", src);
+      s.onload = function () { resolve(true); };
+      s.onerror = function () { reject(new Error("script " + src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  async function makeTransport() {
+    const wisp = wispUrl();
+    const mod = await import("/libcurl-transport/index.mjs");
+    const LibcurlClient = mod.LibcurlClient || mod.default;
+    const t = new LibcurlClient({ wisp: wisp });
+    if (t && t.init) await withTimeout(t.init(), 12000, "libcurl-init");
+    SJ.transport = "libcurl";
+    return t;
+  }
+
+  async function ensureScramjet() {
+    if (SJ.ready && SJ.controller) return SJ;
+    if (SJ.loading) return SJ.loading;
+    SJ.loading = (async function () {
+      if (!("serviceWorker" in navigator)) throw new Error("no service worker");
+      if (typeof registerGoarSW === "function") {
+        try { await registerGoarSW(); } catch (_) {}
+      }
+      await withTimeout(loadScript("/scramjet/scramjet.js"), 8000, "scramjet.js");
+      await withTimeout(loadScript("/controller/controller.api.js"), 8000, "controller.api");
+      if (!global.$scramjetController || !global.$scramjetController.Controller) {
+        throw new Error("Scramjet controller missing");
+      }
+      const transport = await makeTransport();
+      let sw = navigator.serviceWorker.controller;
+      if (!sw) {
+        try {
+          const ready = await withTimeout(navigator.serviceWorker.ready, 8000, "sw-ready");
+          sw = ready && ready.active;
+        } catch (_) {}
+      }
+      if (!sw) {
+        const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        sw = reg.active || reg.waiting;
+      }
+      if (!sw) throw new Error("no service worker available");
+      const controller = new global.$scramjetController.Controller({
+        serviceworker: sw,
+        transport: transport,
+        config: {
+          prefix: "/~/sj/",
+          scramjetPath: "/scramjet/scramjet.js",
+          injectPath: "/controller/controller.inject.js",
+          wasmPath: "/scramjet/scramjet.wasm",
+        },
+      });
+      await withTimeout(controller.wait(), 15000, "sj-wait");
+      SJ.controller = controller;
+      SJ.ready = true;
+      SJ.lastError = "";
+      try {
+        const w = wispUrl();
+        if (typeof MW_FABRIC !== "undefined" && MW_FABRIC) MW_FABRIC.wispUrl = w;
+        localStorage.setItem("goar_wisp_url", w);
+      } catch (_) {}
+      return SJ;
+    })().catch(function (e) {
+      SJ.loading = null;
+      SJ.lastError = e && e.message ? e.message : String(e);
+      throw e;
+    });
+    return SJ.loading;
+  }
+
+  function hostFrame() {
+    return document.getElementById("goar-live-frame")
+      || document.querySelector("#browser-frame-wrap iframe");
+  }
+
+  async function scramjetGo(url) {
+    const target = String(url || "").trim();
+    if (!target) return { ok: false, error: "url required" };
+    const abs = /^https?:\/\//i.test(target) ? target : ("https://" + target.replace(/^\/+/, ""));
+    await ensureScramjet();
+    const iframe = hostFrame();
+    if (!iframe) throw new Error("no browser frame");
+    try { iframe.removeAttribute("srcdoc"); } catch (_) {}
+    if (!SJ.frame || SJ.frame.element !== iframe) {
+      SJ.frame = SJ.controller.createFrame(iframe);
+    }
+    SJ.frame.go(abs);
+    SJ.lastUrl = abs;
+    try {
+      const bar = document.getElementById("browser-url");
+      if (bar) bar.value = abs;
+    } catch (_) {}
+    try { if (typeof setUrlLabel === "function") setUrlLabel(abs); } catch (_) {}
+    return { ok: true, via: "scramjet", url: abs, transport: SJ.transport };
+  }
+
+  function wrapLiveNavigate() {
+    const prev = global.liveNavigate;
+    if (prev && prev._scramjet) return;
+    const wrapped = async function (url, opts) {
+      const raw = String(url || "").trim();
+      if (!raw || raw === "about:home" || raw === "about:blank" || raw === "goar:home") {
+        return prev ? prev(url, opts) : { ok: true };
+      }
+      try {
+        const r = await scramjetGo(raw);
+        if (r && r.ok) return r;
+      } catch (e) {
+        SJ.lastError = e && e.message ? e.message : String(e);
+      }
+      if (typeof prev === "function") return prev(url, opts);
+      return { ok: false, error: SJ.lastError || "scramjet failed" };
+    };
+    wrapped._scramjet = true;
+    global.liveNavigate = wrapped;
+  }
+
+  function scramjetStatus() {
+    return {
+      plane: "scramjet",
+      ready: !!SJ.ready,
+      transport: SJ.transport || "",
+      lastUrl: SJ.lastUrl || "",
+      lastError: SJ.lastError || "",
+      wisp: wispUrl(),
+    };
+  }
+
+  wrapLiveNavigate();
+  global.ensureScramjet = ensureScramjet;
+  global.scramjetGo = scramjetGo;
+  global.scramjetStatus = scramjetStatus;
+})(typeof window !== "undefined" ? window : globalThis);
+</script>
+
+<!-- ====================================================================== -->
 <!-- JS / gecko-menu.js -->
 <!-- ====================================================================== -->
 
@@ -21866,7 +22353,7 @@ function registerGoarSW() {
     try {
       if (!("serviceWorker" in navigator)) return { ok: false, reason: "no-sw" };
       if (location.protocol === "file:") return { ok: false, reason: "file" };
-      const reg = await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
       return { ok: true, scope: reg.scope };
     } catch (e) {
       return { ok: false, error: String(e && e.message ? e.message : e) };
@@ -22802,7 +23289,7 @@ function syncIndicators(patch) {
     if (typeof publicProviderName === "function") {
       am.textContent = publicProviderName(p);
     } else {
-      am.textContent = /kai9000/i.test(p) ? "GOAR" : (p ? p + " · " + __ind.model : __ind.model);
+      am.textContent = /kai9000|aiand/i.test(p) ? "GOAR" : (p ? p + " · " + __ind.model : __ind.model);
     }
   }
 
@@ -30702,7 +31189,7 @@ async function runVibePostAgent(ctx) {
     stepsPerWave: 24,
     maxWaves: 240,
     maxQuiet: 3,
-    apiRetries: 4,
+    apiRetries: 2,
   };
 
   function vibeIsSmallTalk(text) {
@@ -30769,7 +31256,7 @@ async function runVibePostAgent(ctx) {
 
   function vibeRetryable(err) {
     const m = String(err && err.message ? err.message : err || "");
-    if (/AbortError|Stopped|aborted/i.test(m)) return false;
+    if (/AbortError|Stopped|aborted|timed out|timeout/i.test(m)) return false;
     if (/Auth failed|401|403|No API key|No model/i.test(m)) return false;
     if (/All free providers/i.test(m)) return false;
     return /429|500|502|503|504|timeout|network|fetch|stream|temporar|overload|rate.?limit|context.?too.?long|ECONNRESET/i.test(m);
@@ -32716,8 +33203,10 @@ try { wireAgentUi(); } catch (e) { console.error(e); }
     { name: "segfault.net", href: "https://www.segfault.net", blurb: "Free SSH root servers. Join them: thc.org/ops." },
     { name: "Duck.ai", href: "https://duck.ai", blurb: "Private, no-account chat from DuckDuckGo." },
     { name: "DuckDuckGo", href: "https://duckduckgo.com", blurb: "Search." },
-    { name: "Free.ai", href: "https://free.ai", blurb: "OpenAI-compatible demo models." },
-    { name: "Pollinations", href: "https://pollinations.ai", blurb: "Image generation. No key." },
+    { name: "ai&", href: "https://aiand.com", blurb: "Open-weight chat. Free Qwen for GOAR." },
+    { name: "Pollinations", href: "https://pollinations.ai", blurb: "Free text and image generation. No key." },
+    { name: "Scramjet", href: "https://github.com/MercuryWorkshop/scramjet", blurb: "In-tab web proxy. Sites load here." },
+    { name: "Mercury Workshop", href: "https://mercurywork.shop", blurb: "Scramjet, WISP, libcurl.js, epoxy." },
     { name: "xterm.js", href: "https://xtermjs.org", blurb: "The terminal you type into." },
     { name: "sshclient-wasm", href: "https://github.com/VerdigrisTech/sshclient-wasm", blurb: "SSH in this tab." },
   ];
@@ -32733,7 +33222,7 @@ try { wireAgentUi(); } catch (e) { console.error(e); }
 
   const LICENCE = [
     "GOAR is provided as-is, without warranty, for the person using this copy.",
-    "Third-party code keeps its own licences: xterm.js (MIT), sshclient-wasm, BusyBox/WASI, Gecko WASM, Pollinations, Duck.ai, Free.ai, THC segfault.",
+    "Third-party code keeps its own licences: xterm.js (MIT), sshclient-wasm, BusyBox/WASI, Scramjet (AGPL), libcurl.js, Pollinations, Duck.ai, Free.ai, THC segfault.",
     "Kali, Pollinations, and THC services are not affiliated with GOAR. Use them under their terms.",
     "Do not use the Kali box to attack systems you do not own. THC will ban abuse; so will we by cutting the session.",
   ];
@@ -33112,9 +33601,9 @@ try {
           '<button type="button" class="ob-preset" data-id="' +
           esc(p.id) +
           '"><b>' +
-          esc((p.hideApi || p.id === "kai9000") ? "GOAR" : (p.displayName || p.id)) +
+          esc((p.hideApi || p.id === "kai9000" || p.id === "aiand") ? "GOAR" : (p.displayName || p.id)) +
           "</b><span>" +
-          esc((p.hideApi || p.id === "kai9000") ? "built in" : (p.apiBase || "").replace(/^https?:\/\//, "")) +
+          esc((p.hideApi || p.id === "kai9000" || p.id === "aiand") ? "built in" : (p.apiBase || "").replace(/^https?:\/\//, "")) +
           "</span></button>"
       )
       .join("");
@@ -33361,6 +33850,9 @@ try {
     const st = $("browser-status");
     const empty = $("browser-empty");
     if (st) st.textContent = "starting";
+    if (typeof ensureScramjet === "function") {
+      ensureScramjet().catch(function () {});
+    }
     if (typeof ensureGecko === "function") {
       try {
         const cur = (typeof geckoStatus === "function" && geckoStatus()) || {};

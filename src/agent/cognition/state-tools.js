@@ -194,7 +194,7 @@ function syncIndicators(patch) {
     if (typeof publicProviderName === "function") {
       am.textContent = publicProviderName(p);
     } else {
-      am.textContent = /kai9000/i.test(p) ? "GOAR" : (p ? p + " · " + __ind.model : __ind.model);
+      am.textContent = /kai9000|aiand/i.test(p) ? "GOAR" : (p ? p + " · " + __ind.model : __ind.model);
     }
   }
 

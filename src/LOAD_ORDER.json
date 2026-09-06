@@ -1,6 +1,7 @@
 [
   "config/flags.js",
   "config/assets.js",
+  "net/identity.js",
   "boot/immobiliser.js",
   "providers/catalog.js",
   "providers/api.js",
@@ -37,6 +38,7 @@
   "net/eruda-plane.js",
   "net/gecko-wisp-bridge.js",
   "net/gecko-plane.js",
+  "net/scramjet-plane.js",
   "net/gecko-menu.js",
   "net/gecko-features.js",
   "net/cdp-plane.js",

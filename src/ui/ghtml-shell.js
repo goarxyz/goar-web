@@ -66,9 +66,9 @@
           '<button type="button" class="ob-preset" data-id="' +
           esc(p.id) +
           '"><b>' +
-          esc((p.hideApi || p.id === "kai9000") ? "GOAR" : (p.displayName || p.id)) +
+          esc((p.hideApi || p.id === "kai9000" || p.id === "aiand") ? "GOAR" : (p.displayName || p.id)) +
           "</b><span>" +
-          esc((p.hideApi || p.id === "kai9000") ? "built in" : (p.apiBase || "").replace(/^https?:\/\//, "")) +
+          esc((p.hideApi || p.id === "kai9000" || p.id === "aiand") ? "built in" : (p.apiBase || "").replace(/^https?:\/\//, "")) +
           "</span></button>"
       )
       .join("");
@@ -315,6 +315,9 @@
     const st = $("browser-status");
     const empty = $("browser-empty");
     if (st) st.textContent = "starting";
+    if (typeof ensureScramjet === "function") {
+      ensureScramjet().catch(function () {});
+    }
     if (typeof ensureGecko === "function") {
       try {
         const cur = (typeof geckoStatus === "function" && geckoStatus()) || {};

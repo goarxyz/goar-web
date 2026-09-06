@@ -420,30 +420,24 @@ async function goarHostFetch(url, opts) {
   }
   const maxBytes = Math.min(Number(opts.maxBytes) || 250000, 2_000_000);
   const body = opts.body != null ? String(opts.body) : undefined;
+  if (typeof goarMergeHeaders === "function" && !opts.rawHeaders) {
+    headers = goarMergeHeaders(url, headers);
+  }
+
+  if (typeof scramjetBareFetch === "function") {
+    try {
+      const sj = await scramjetBareFetch(url, { method, headers, body, maxBytes });
+      if (sj && sj.status) {
+        sj.ms = Math.round(performance.now() - t0);
+        return sj;
+      }
+    } catch (e) {
+      MW_FABRIC.lastError = String(e && e.message ? e.message : e);
+    }
+  }
 
   if (!MW_FABRIC.ready) {
     try { await ensureMwFabric(); } catch (_) {}
-  }
-
-  try {
-    const man = await manusHttpFetch(url, {
-      method,
-      headers,
-      body,
-      render: opts.render,
-      extract: opts.extract,
-      selector: opts.selector,
-      ttl: opts.ttl,
-      input: opts.input,
-      output: opts.output,
-    });
-    if (man && man.ok && (man.body || man.status)) {
-      man.body = String(man.body || "").slice(0, maxBytes);
-      man.ms = Math.round(performance.now() - t0);
-      return man;
-    }
-  } catch (e) {
-    MW_FABRIC.lastError = String(e && e.message ? e.message : e);
   }
 
   if (MW_FABRIC.engine === "libcurl" && MW_FABRIC.libcurl) {
@@ -473,6 +467,27 @@ async function goarHostFetch(url, opts) {
       console.warn("[goar] libcurl fetch fail", e);
       MW_FABRIC.lastError = String(e.message || e);
     }
+  }
+
+  try {
+    const man = await manusHttpFetch(url, {
+      method,
+      headers,
+      body,
+      render: opts.render,
+      extract: opts.extract,
+      selector: opts.selector,
+      ttl: opts.ttl,
+      input: opts.input,
+      output: opts.output,
+    });
+    if (man && man.ok && (man.body || man.status)) {
+      man.body = String(man.body || "").slice(0, maxBytes);
+      man.ms = Math.round(performance.now() - t0);
+      return man;
+    }
+  } catch (e) {
+    MW_FABRIC.lastError = String(e && e.message ? e.message : e);
   }
 
   if (MW_FABRIC.engine === "epoxy" && MW_FABRIC.epoxy) {

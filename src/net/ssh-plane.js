@@ -110,7 +110,7 @@
       const s = localStorage.getItem("goar_wisp_url");
       if (s) return s;
     } catch (_) {}
-    return "wss://cors.manus.space/wisp/";
+    return "wss://wisp.mercurywork.shop/";
   }
 
   /* ── WISP mux ────────────────────────────────────── */
@@ -143,6 +143,7 @@
       if (saved) push(saved);
     } catch (_) {}
     push("wss://wisp.mercurywork.shop/");
+    push("wss://cors.manus.space/wisp/");
     return pool;
   }
 

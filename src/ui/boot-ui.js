@@ -79,7 +79,7 @@ function fillProviderSelect(sel, selected) {
   list.forEach((p) => {
     const o = document.createElement("option");
     o.value = p.id;
-    o.textContent = (p.hideApi || p.id === "kai9000")
+    o.textContent = (p.hideApi || p.id === "kai9000" || p.id === "aiand")
       ? "GOAR"
       : (typeof publicProviderName === "function" ? publicProviderName(p.id) : (p.displayName || p.id));
     sel.appendChild(o);
@@ -185,7 +185,7 @@ function applyCredProvider() {
   const hint = document.querySelector("#credPhase .hint");
   if (hint) {
     hint.textContent = noKey
-      ? ((prov && (prov.hideApi || prov.id === "kai9000")) ? "GOAR is ready — no key" : "No key needed · switch provider anytime")
+      ? ((prov && (prov.hideApi || prov.id === "kai9000" || prov.id === "aiand")) ? "GOAR is ready — no key" : "No key needed · switch provider anytime")
       : "Provider + API key · models load live from your API";
   }
 }

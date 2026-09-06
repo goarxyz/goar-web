@@ -5,7 +5,7 @@
     stepsPerWave: 24,
     maxWaves: 240,
     maxQuiet: 3,
-    apiRetries: 4,
+    apiRetries: 2,
   };
 
   function vibeIsSmallTalk(text) {
@@ -72,7 +72,7 @@
 
   function vibeRetryable(err) {
     const m = String(err && err.message ? err.message : err || "");
-    if (/AbortError|Stopped|aborted/i.test(m)) return false;
+    if (/AbortError|Stopped|aborted|timed out|timeout/i.test(m)) return false;
     if (/Auth failed|401|403|No API key|No model/i.test(m)) return false;
     if (/All free providers/i.test(m)) return false;
     return /429|500|502|503|504|timeout|network|fetch|stream|temporar|overload|rate.?limit|context.?too.?long|ECONNRESET/i.test(m);

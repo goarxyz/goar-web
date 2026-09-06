@@ -15,8 +15,6 @@
   const STATUS = ORIGIN + "/duckchat/v1/status";
   const CHAT = ORIGIN + "/duckchat/v1/chat";
   const MODELS = ORIGIN + "/duckchat/v1/models";
-  const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
-  const FE_VERSION = "serp_20250710_090702_ET-70eaca6aea2948b0bb60";
   const FREE_MODELS = [
     "gpt-5.4-mini",
     "gpt-5.6-luna",
@@ -65,15 +63,26 @@
   }
 
   function duckHeaders(extra) {
-    return Object.assign({
-      "User-Agent": UA,
-      Accept: "text/event-stream, application/json",
-      "Accept-Language": "en-US,en;q=0.9",
-      Referer: "https://duck.ai/",
-      Origin: ORIGIN,
-      "x-vqd-accept": "1",
-      "x-fe-version": FE_VERSION,
-    }, extra || {});
+    const url = CHAT;
+    const dyn = typeof goarMergeHeaders === "function"
+      ? goarMergeHeaders(url, {
+          Accept: "text/event-stream, application/json",
+          "x-vqd-accept": "1",
+          "x-fe-version": typeof goarFeVersion === "function" ? goarFeVersion() : ("serp_" + Date.now()),
+        })
+      : {
+          "User-Agent": typeof navigator !== "undefined" ? navigator.userAgent : "Mozilla/5.0",
+          Accept: "text/event-stream, application/json",
+          "Accept-Language": "en-US,en;q=0.9",
+          Referer: pickDuckOrigin() + "/",
+          Origin: pickDuckOrigin(),
+          "x-vqd-accept": "1",
+        };
+    return Object.assign({}, dyn, extra || {});
+  }
+
+  function pickDuckOrigin() {
+    return Math.random() < 0.5 ? "https://duckduckgo.com" : "https://duck.ai";
   }
 
   function asResponse(status, headersObj, body, via) {
