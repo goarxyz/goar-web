@@ -7,13 +7,18 @@ function loadSettings() {
     if (!s.apiBase) s.apiBase = DEFAULTS.apiBase;
     if (s.apiModel == null || s.apiModel === "") s.apiModel = DEFAULTS.apiModel || "";
     if (!s.provider) s.provider = detectProvider(s.apiBase) || DEFAULTS.provider;
+    if (s.provider === "duckai" || /duckduckgo\.com|duck\.ai|duckchat/i.test(String(s.apiBase || ""))) {
+      s.provider = "kai9000";
+      s.apiBase = "https://api.kai9000.com";
+      s.apiModel = "fast";
+    }
     // First-run only. Never steal a provider the user already picked.
     if (!(s.apiKey || "").trim()) {
       const p = typeof getProvider === "function" ? getProvider(s.provider) : null;
       if (!s.provider || !p) {
-        s.provider = "duckai";
-        s.apiBase = "https://duckduckgo.com/duckchat/v1";
-        if (!s.apiModel) s.apiModel = "gpt-5.4-mini";
+        s.provider = "kai9000";
+        s.apiBase = "https://api.kai9000.com";
+        if (!s.apiModel) s.apiModel = "fast";
       }
     }
     if (s.customDns == null) s.customDns = DEFAULTS.customDns || "";
@@ -163,7 +168,8 @@ function applyProviderPreset(id) {
   if (el.apiBase) {
     el.apiBase.value = p.apiBase || "";
     el.apiBase.disabled = !isCustom && !!p.apiBase;
-    el.apiBase.placeholder = isCustom ? "https://your-host/v1" : (p.apiBase || "");
+    el.apiBase.placeholder = isCustom ? "https://your-host/v1" : ((p.hideApi || p.id === "kai9000") ? "" : (p.apiBase || ""));
+    if (p.hideApi || p.id === "kai9000") el.apiBase.value = p.apiBase || el.apiBase.value;
   }
   const baseField = document.getElementById("apiBaseField");
   if (baseField) {
@@ -181,10 +187,12 @@ function applyProviderPreset(id) {
   // help link
   const hint = document.getElementById("providerHint");
   if (hint) {
-    const need = p.requiresApiKey && !p.supportsOptionalApiKey ? "API key required" : "API key optional";
-    hint.innerHTML = "<b>" + p.displayName + "</b> · " + need +
-      (p.apiKeyUrl ? ' · <a href="' + p.apiKeyUrl + '" target="_blank" rel="noopener" style="color:#f44">get key</a>' : "") +
-      " · base auto-filled" + (isCustom ? " (edit for custom host)" : "");
+    const hidden = !!(p.hideApi || p.id === "kai9000");
+    const name = hidden ? "GOAR" : (p.displayName || p.id);
+    const need = hidden ? "built in" : (p.requiresApiKey && !p.supportsOptionalApiKey ? "API key required" : "API key optional");
+    hint.innerHTML = "<b>" + name + "</b> · " + need +
+      (!hidden && p.apiKeyUrl ? ' · <a href="' + p.apiKeyUrl + '" target="_blank" rel="noopener" style="color:#f44">get key</a>' : "") +
+      (hidden ? "" : (" · base auto-filled" + (isCustom ? " (edit for custom host)" : "")));
   }
 }
 
@@ -217,6 +225,7 @@ function saveSettingsFromForm() {
   const sshSecret = (el.sshSecret && el.sshSecret.value || "").trim();
   const s = { provider: p ? p.id : provider, apiBase, apiModel, apiKey, customDns, cdpUrl, sshHost, sshPort, sshUser, sshPassword, sshSecret };
   saveSettings(s);
+  try { if (typeof readMcpForm === "function") readMcpForm(); } catch (_) {}
   return s;
 }
 

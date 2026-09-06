@@ -191,7 +191,11 @@ function syncIndicators(patch) {
   if (am && __ind.model) {
     let p = "";
     try { p = (typeof settingsSnapshot === "function" && settingsSnapshot().provider) || ""; } catch (_) {}
-    am.textContent = p ? p + " · " + __ind.model : __ind.model;
+    if (typeof publicProviderName === "function") {
+      am.textContent = publicProviderName(p);
+    } else {
+      am.textContent = /kai9000/i.test(p) ? "GOAR" : (p ? p + " · " + __ind.model : __ind.model);
+    }
   }
 
   /** @type {string[]} */

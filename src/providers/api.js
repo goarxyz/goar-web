@@ -37,6 +37,7 @@ function providerByBase(base) {
   if (b.includes("deepinfra.com")) return getProvider("deepinfra");
   if (b.includes("fireworks.ai")) return getProvider("fireworks");
   if (b.includes("venice.ai")) return getProvider("venice");
+  if (b.includes("kai9000.com")) return getProvider("kai9000");
   if (b.includes("duckduckgo.com") || b.includes("duck.ai") || b.includes("duckchat")) return getProvider("duckai");
   if (b.includes("11434") || b.includes("ollama")) return getProvider("ollama");
   if (b.includes("free.ai")) return getProvider("freeai");
@@ -67,6 +68,7 @@ function normalizeApiBase(base, providerId) {
   // Venice
   if (/api\.venice\.ai$/i.test(b)) return b + "/api/v1";
   if (/api\.venice\.ai\/api$/i.test(b)) return b + "/v1";
+  if (/api\.kai9000\.com/i.test(b)) return "https://api.kai9000.com";
   if (/duckduckgo\.com\/duckchat/i.test(b) || /duck\.ai/i.test(b)) return "https://duckduckgo.com/duckchat/v1";
   // Gemini openai-compat
   if (/generativelanguage\.googleapis\.com\/v1beta$/i.test(b)) return b + "/openai";
@@ -100,7 +102,8 @@ function goarUrlNeedsProxy(url) {
     if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0") return false;
     if (typeof location !== "undefined" && u.origin === location.origin) return false;
     if (/cors\.manus\.space$/i.test(h)) return false;
-    if (/api\.free\.ai$/i.test(h)) return false;
+    if (/api\.kai9000\.com$/i.test(h) || /kai9000\.com$/i.test(h)) return false;
+    if (/text\.pollinations\.ai$/i.test(h) || /pollinations\.ai$/i.test(h)) return false;
     if (/duckduckgo\.com$/i.test(h) || /duck\.ai$/i.test(h)) return true;
     return u.protocol === "http:" || u.protocol === "https:";
   } catch (_) {
@@ -140,6 +143,9 @@ function authHeaders(apiKey, base, providerId) {
     headers["HTTP-Referer"] = (typeof location !== "undefined" && location.origin) || "https://goar.local";
     headers["X-Title"] = "GOAR OS";
   }
+  if (pid === "kai9000" || b.includes("kai9000.com")) {
+    headers.Accept = headers.Accept || "application/json";
+  }
   if (pid === "freeai" || b.includes("free.ai")) {
     headers["X-User-Id"] = goarAnonId();
     headers.Accept = headers.Accept || "application/json";
@@ -154,10 +160,10 @@ const SETTINGS_KEY = "goar.workspace.settings.v7-providers";
 const LS_KEY = SETTINGS_KEY;
 
 const DEFAULTS = {
-  provider: "duckai",
+  provider: "kai9000",
   wispUrl: "",
-  apiBase: "https://duckduckgo.com/duckchat/v1",
-  apiModel: "gpt-5.4-mini",
+  apiBase: "https://api.kai9000.com",
+  apiModel: "fast",
   apiKey: "",
   customDns: "",
   temperature: 0.2,
@@ -238,5 +244,23 @@ const weights = { wasm: 0.05, lib: 0.02, bzimage: 0.08, initrd: 0.85 };
 function detectProvider(base) {
   const p = providerByBase(base);
   return p ? p.id : "openai-compatible";
+}
+
+function isHiddenApiProvider(id, base) {
+  const s = String(id || "") + " " + String(base || "");
+  return /kai9000/i.test(s);
+}
+
+function publicProviderName(id, base) {
+  if (isHiddenApiProvider(id, base)) return "GOAR";
+  const p = typeof getProvider === "function" ? getProvider(id) : null;
+  if (p && p.hideApi) return p.displayName || "GOAR";
+  return (p && p.displayName) || String(id || "GOAR");
+}
+
+function publicModelName(model, provider, base) {
+  if (isHiddenApiProvider(provider, base)) return "GOAR";
+  const m = String(model || "").trim();
+  return m || "GOAR";
 }
 

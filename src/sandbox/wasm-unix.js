@@ -1,7 +1,7 @@
 /**
- * GOAR Wasm Unix — native execution plane.
- * Python runs in Pyodide (WebAssembly). Shell/coreutils run in-process
- * against the same filesystem. No x86 virtualization on the default path.
+ * GOAR Wasm Unix — local execution plane.
+ * Shell/coreutils: ash + WASI BusyBox. Live workspace is Kali SSH.
+ * Pyodide is opt-in and off by default.
  */
 const UNIX_NAME = "goaros";
 const UNIX_HOME = "/root";
@@ -21,7 +21,7 @@ const Unix = {
     PYTHONUNBUFFERED: "1",
     PIP_BREAK_SYSTEM_PACKAGES: "1",
     GOAR_WORKDIR: UNIX_CWD0,
-    GOAR_ENGINE: "pyodide+unix",
+    GOAR_ENGINE: "busybox+unix",
   },
   aliases: { ll: "ls -la", python: "python3", pip: "pip3" },
   history: [],
@@ -76,7 +76,7 @@ function unixEnsureJs(path, dir) {
 
 function unixSeedJs() {
   ["/", "/tmp", "/root", "/home", "/workspace", "/opt", "/opt/goar", "/usr", "/usr/bin", "/usr/local", "/usr/local/bin", "/bin", "/etc"].forEach((p) => unixEnsureJs(p, true));
-  const release = "NAME=GOAR\nID=goaros\nPRETTY_NAME=\"GOAR Wasm Unix\"\nENGINE=pyodide\n";
+  const release = "NAME=GOAR\nID=goaros\nPRETTY_NAME=\"GOAR Wasm Unix\"\nENGINE=busybox\n";
   unixJsWrite("/etc/os-release", release);
   unixJsWrite("/etc/hostname", UNIX_NAME + "\n");
   unixJsWrite("/workspace/README.md", "# Workspace\nWrite files here. The agent and the editor share this tree.\n");
@@ -318,66 +318,17 @@ function unixParseStage(tokens) {
 const UNIX_HELP = [
   "ash · ls cat echo pwd cd mkdir rm cp mv touch head tail wc grep find",
   "sort uniq cut tr tee seq base64 sha256sum md5sum date uname whoami id",
-  "env export which printf test sleep true false python3 pip3 curl wget",
-  "python and pip run in Pyodide (native Wasm). Network uses the host proxy.",
+  "env export which printf test sleep true false busybox curl wget",
+  "python3 lives on the Kali VM. Local shell is BusyBox ash.",
 ].join("\n");
 
 async function unixRunPython(argv, stdin) {
-  if (typeof ensurePysecWorker === "function") {
-    try { await ensurePysecWorker(); } catch (e) { return { code: 1, stdout: "", stderr: String(e && e.message ? e.message : e) + "\n" }; }
+  if (typeof sshReady === "function" && sshReady() && typeof sshExec === "function") {
+    const rest = argv.slice(1).join(" ");
+    const r = await sshExec("python3 " + rest, 90000);
+    return { code: r && r.code, stdout: (r && r.output) || "", stderr: "" };
   }
-  const py = unixPy();
-  if (!py) return { code: 1, stdout: "", stderr: "python: pyodide not ready\n" };
-  await unixSyncJsIntoPy();
-  let code = "";
-  const dashC = argv.indexOf("-c");
-  if (dashC >= 0) code = argv.slice(dashC + 1).join(" ");
-  else if (argv[1] && argv[1][0] !== "-") {
-    try { code = unixRead(unixNorm(argv[1])); }
-    catch (e) { return { code: 1, stdout: "", stderr: String(e.message || e) + "\n" }; }
-  } else if (stdin) code = stdin;
-  else return { code: 0, stdout: "Python 3.12 (Pyodide Wasm)\n", stderr: "" };
-  try {
-    py.globals.set("_goar_src", code);
-    py.globals.set("_goar_stdin", stdin || "");
-    const raw = await py.runPythonAsync(`
-import sys, io, traceback
-_out, _err = io.StringIO(), io.StringIO()
-_stdin = io.StringIO(str(_goar_stdin))
-_so, _se, _si = sys.stdout, sys.stderr, sys.stdin
-sys.stdout, sys.stderr, sys.stdin = _out, _err, _stdin
-_code = 0
-try:
-    import ast
-    src = str(_goar_src)
-    tree = ast.parse(src, "<stdin>", "exec")
-    last = None
-    if tree.body and isinstance(tree.body[-1], ast.Expr):
-        last = tree.body.pop()
-    g = {"__name__": "__main__"}
-    if tree.body:
-        exec(compile(tree, "<stdin>", "exec"), g, g)
-    if last is not None:
-        val = eval(compile(ast.Expression(last.value), "<stdin>", "eval"), g, g)
-        if val is not None:
-            print(repr(val))
-except SystemExit as e:
-    _code = int(e.code) if isinstance(e.code, int) else 0
-except Exception:
-    _code = 1
-    traceback.print_exc()
-finally:
-    sys.stdout, sys.stderr, sys.stdin = _so, _se, _si
-(_code, _out.getvalue(), _err.getvalue())
-`);
-    const codeN = raw && raw.get ? raw.get(0) : (raw && raw[0]);
-    const out = raw && raw.get ? raw.get(1) : (raw && raw[1]) || "";
-    const err = raw && raw.get ? raw.get(2) : (raw && raw[2]) || "";
-    try { if (raw && raw.destroy) raw.destroy(); } catch (_) {}
-    return { code: Number(codeN) || 0, stdout: String(out || ""), stderr: String(err || "") };
-  } catch (e) {
-    return { code: 1, stdout: "", stderr: String(e && e.message ? e.message : e) + "\n" };
-  }
+  return { code: 127, stdout: "", stderr: "python3: use the Kali workspace (Pyodide is off)\n" };
 }
 
 async function hostInstallWheelToUnix(name) {
@@ -399,87 +350,11 @@ async function hostInstallWheelToUnix(name) {
 }
 
 async function unixRunPip(argv) {
-  if (typeof ensurePysecWorker === "function") {
-    try { await ensurePysecWorker(); } catch (e) { return { code: 1, stdout: "", stderr: String(e && e.message ? e.message : e) + "\n" }; }
+  if (typeof sshReady === "function" && sshReady() && typeof sshExec === "function") {
+    const r = await sshExec("python3 -m pip " + argv.slice(1).join(" "), 180000);
+    return { code: r && r.code, stdout: (r && r.output) || "", stderr: "" };
   }
-  const py = unixPy();
-  if (!py) return { code: 1, stdout: "", stderr: "pip: pyodide not ready\n" };
-  if (argv[1] === "--version" || argv.includes("--version")) {
-    return { code: 0, stdout: "pip 24.0 from pyodide/micropip (python 3.12)\n", stderr: "" };
-  }
-  const rest = argv.slice(1).filter((a) => a !== "--break-system-packages" && a !== "--disable-pip-version-check" && a !== "--no-input" && a !== "--retries" && a !== "1" && a !== "--timeout" && a !== "20" && a !== "-q");
-  if (!rest.length || rest[0] === "help") {
-    return { code: 0, stdout: "usage: pip install <pkg>  |  pip list  |  pip --version\n", stderr: "" };
-  }
-  if (rest[0] === "list") {
-    try {
-      const raw = await py.runPythonAsync(`
-import json
-mods = []
-try:
-    import micropip
-    mods = sorted(getattr(micropip, "list", lambda: {})() or [])
-except Exception:
-    pass
-json.dumps(mods)
-`);
-      return { code: 0, stdout: String(raw || "[]") + "\n", stderr: "" };
-    } catch (e) {
-      return { code: 1, stdout: "", stderr: String(e && e.message ? e.message : e) + "\n" };
-    }
-  }
-  if (rest[0] !== "install") {
-    return { code: 2, stdout: "", stderr: "pip: only install / list / --version in this environment\n" };
-  }
-  const pkgs = rest.slice(1).filter((a) => a && a[0] !== "-");
-  if (!pkgs.length) return { code: 2, stdout: "", stderr: "pip install: package required\n" };
-  try {
-    try { await py.loadPackage(["micropip", "packaging"]); } catch (e) {
-      try { await py.loadPackage("micropip"); } catch (e2) {
-        return { code: 1, stdout: "", stderr: "pip: cannot load micropip: " + String(e2 && e2.message ? e2.message : e2) + "\n" };
-      }
-    }
-    py.globals.set("_goar_pkgs_json", JSON.stringify(pkgs));
-    const raw = await py.runPythonAsync(`
-import json, traceback, sys
-pkgs = json.loads(str(_goar_pkgs_json))
-out = []
-code = 0
-try:
-    import micropip
-    for p in pkgs:
-        try:
-            await micropip.install(p)
-            out.append("Successfully installed " + str(p))
-        except Exception as e:
-            out.append("micropip " + str(p) + ": " + str(e))
-            raise
-except Exception as e:
-    code = 1
-    out.append("ERROR: " + str(e))
-if not out:
-    out.append("pip: nothing to do")
-json.dumps({"code": code, "out": "\\n".join(out)})
-`);
-    let parsed;
-    try { parsed = JSON.parse(String(raw)); } catch (_) { parsed = { code: 1, out: String(raw) }; }
-    if (parsed.code === 0) return { code: 0, stdout: (parsed.out || "") + "\n", stderr: "" };
-    // Host-fetch a pure-python wheel and install from the shared FS
-    const fallback = [];
-    for (const name of pkgs) {
-      try {
-        const host = await hostInstallWheelToUnix(name);
-        fallback.push(host.line);
-        if (!host.ok) parsed.code = 1;
-      } catch (e) {
-        fallback.push("ERROR: " + name + ": " + String(e && e.message ? e.message : e));
-        parsed.code = 1;
-      }
-    }
-    return { code: parsed.code || 0, stdout: (parsed.out || "") + "\n" + fallback.join("\n") + "\n", stderr: "" };
-  } catch (e) {
-    return { code: 1, stdout: "", stderr: String(e && e.message ? e.message : e) + "\n" };
-  }
+  return { code: 127, stdout: "", stderr: "pip: use the Kali workspace (Pyodide is off)\n" };
 }
 
 async function unixHttp(url, dest) {
@@ -975,12 +850,16 @@ async function bootWasmUnix() {
   try {
     if (typeof jliteRestoreTree === "function") await jliteRestoreTree();
   } catch (e) { console.warn("[goar] drive restore", e); }
-  try { if (typeof setProgress === "function") setProgress(20, "Python runtime", "Pyodide"); } catch (_) {}
+  try { if (typeof setProgress === "function") setProgress(20, "Unix", "BusyBox"); } catch (_) {}
   try { if (typeof bootItem === "function") bootItem("sandbox", "run", "unix"); } catch (_) {}
-  if (typeof ensurePysecWorker === "function") {
+  const skipPy = (typeof window !== "undefined" && (window.GOAR_SKIP_PYODIDE || window.GOAR_KALI_ONLY));
+  if (!skipPy && typeof ensurePysecWorker === "function") {
     try { await ensurePysecWorker(); } catch (e) { console.warn("[goar] pyodide", e); }
   }
-  const py = unixPy();
+  if (typeof ensureWasiBox === "function") {
+    try { await ensureWasiBox(); } catch (e) { console.warn("[goar] busybox", e); }
+  }
+  const py = skipPy ? null : unixPy();
   if (py) {
     try {
       py.FS.mkdirTree("/workspace");
@@ -1001,21 +880,21 @@ async function bootWasmUnix() {
       if (typeof ensureWasiBox === "function") ensureWasiBox().catch(() => {});
     } catch (_) {}
     try {
-      if (typeof upgradePysecPack === "function") upgradePysecPack().catch(() => {});
+      if (!skipPy && typeof upgradePysecPack === "function") upgradePysecPack().catch(() => {});
     } catch (_) {}
   }
   Unix.ready = true;
   window.__GOAR_UNIX = Unix;
   window.__emulator = window.__emulator || { unix: true, serial0_send: function () {} };
   window.__serialSend = function () {};
-  try { if (typeof setProgress === "function") setProgress(92, "Unix ready", "Pyodide · ash"); } catch (_) {}
+  try { if (typeof setProgress === "function") setProgress(92, "Unix ready", "BusyBox · ash"); } catch (_) {}
   try { if (typeof bootItem === "function") { bootItem("sandbox", "ok", "ok"); bootItem("toolkit", "ok", "ok"); } } catch (_) {}
   try { window.__goarMarkEnvReady?.(true, "wasm unix"); } catch (_) {}
   try { if (typeof seqDone !== "undefined") seqDone = true; } catch (_) {}
   try { window.seqDone = true; } catch (_) {}
-  unixTermWrite("\r\n\x1b[90m" + UNIX_NAME + "  ·  Pyodide  ·  ash  ·  workspace persisted\x1b[0m\r\n" + unixPrompt());
+  unixTermWrite("\r\n\x1b[90m" + UNIX_NAME + "  ·  BusyBox  ·  ash  ·  Kali is the live workspace\x1b[0m\r\n" + unixPrompt());
   try { if (typeof jliteSchedulePersist === "function") jliteSchedulePersist(); } catch (_) {}
-  return { ok: true, engine: "pyodide+unix" };
+  return { ok: true, engine: "busybox+unix" };
 }
 
 try {

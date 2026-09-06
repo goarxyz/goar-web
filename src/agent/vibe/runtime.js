@@ -4,7 +4,7 @@
   const VIBE_RUNTIME = {
     stepsPerWave: 24,
     maxWaves: 240,
-    maxQuiet: 2,
+    maxQuiet: 3,
     apiRetries: 4,
   };
 
@@ -14,6 +14,13 @@
     return /^(hi|hey|hello|howdy|yo|sup|hiya|thanks|thank you|ok|okay|gm|good (morning|evening|afternoon)|how are you|what('?s| is) up|who are you|what can you do)[\s!.?,]*$/i.test(t);
   }
 
+  function vibeSkipTools(text) {
+    if (vibeIsSmallTalk(text)) return true;
+    const t = String(text || "").trim();
+    if (!t || t.length > 48) return false;
+    return /^(say pong|pong)[\s!.?,]*$/i.test(t);
+  }
+
   function vibeMissionOpen() {
     try {
       if (typeof agentState === "undefined") return false;
@@ -21,8 +28,8 @@
       if (agentState.todos && agentState.todos.some((t) => t && !t.done)) return true;
       const m = String(agentState.mission || "").toLowerCase();
       if (!m) return false;
-      if (vibeIsSmallTalk(m) || (/^(hi|hey|hello|thanks|ok|okay|yo)\b/.test(m) && m.length < 24)) return false;
-      return /\b(explor|build|fix|implement|review|write|create|scan|test|refactor|ship|assess|audit|deploy|debug|analy|open|fetch|code|file|workspace)\b/.test(m);
+      if (vibeIsSmallTalk(m) || (/^(hi|hey|hello|thanks|ok|okay|yo|say pong|pong)\b/.test(m) && m.length < 24)) return false;
+      return /\b(explor|list|build|fix|implement|review|write|create|scan|test|refactor|ship|assess|audit|deploy|debug|analy|open|fetch|code|file|workspace|tool)\b/.test(m);
     } catch (_) {
       return false;
     }
@@ -55,7 +62,7 @@
       }
     } catch (_) {}
     return (
-      "Continue the same mission. Use tools. Do not recap and do not stop." + todos
+      "Continue the same mission. Call a tool now (list_dir, read_file, bash, or todo). Do not recap. Do not stop." + todos
     );
   }
 
@@ -67,6 +74,7 @@
     const m = String(err && err.message ? err.message : err || "");
     if (/AbortError|Stopped|aborted/i.test(m)) return false;
     if (/Auth failed|401|403|No API key|No model/i.test(m)) return false;
+    if (/All free providers/i.test(m)) return false;
     return /429|500|502|503|504|timeout|network|fetch|stream|temporar|overload|rate.?limit|context.?too.?long|ECONNRESET/i.test(m);
   }
 
@@ -116,6 +124,7 @@
 
   global.VIBE_RUNTIME = VIBE_RUNTIME;
   global.vibeIsSmallTalk = vibeIsSmallTalk;
+  global.vibeSkipTools = vibeSkipTools;
   global.vibeMissionOpen = vibeMissionOpen;
   global.vibeShouldKeepGoing = vibeShouldKeepGoing;
   global.vibeContinueMessage = vibeContinueMessage;

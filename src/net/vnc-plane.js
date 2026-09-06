@@ -161,7 +161,8 @@
     const target = typeof resolveSshTarget === "function" ? resolveSshTarget() : { host: "segfault.net", user: "root", password: "segfault", ports: [443, 22] };
     if (typeof sshOpenTcp !== "function") throw new Error("sshOpenTcp missing");
     const port = (typeof SSH !== "undefined" && SSH.port) || target.ports[0] || 443;
-    const sock = sshOpenTcp(target.host, port);
+    let sock = sshOpenTcp(target.host, port);
+    if (sock && typeof sock.then === "function") sock = await sock;
     STATE.sock = sock;
     if (typeof __GOAR_SSH_DRIVE !== "function") throw new Error("SSH engine missing");
     const driven = await __GOAR_SSH_DRIVE({

@@ -21,14 +21,15 @@
 
   function tunnelUrl() {
     try {
-      if (typeof pickWispUrl === "function") {
-        const u = String(pickWispUrl && "" || "");
+      if (typeof resolveWispUrl === "function") {
+        const u = resolveWispUrl();
+        if (u) return u;
       }
     } catch (_) {}
     if (global.__GOAR_EPOXY_WISP) return String(global.__GOAR_EPOXY_WISP);
     try {
       const s = typeof mwFabricStatus === "function" ? mwFabricStatus() : {};
-      if (s && /cors\.manus\.space/.test(s.wispUrl || "") && global.__GOAR_MANUS_TCP_OK) return s.wispUrl;
+      if (s && s.wispUrl) return s.wispUrl;
     } catch (_) {}
     return "wss://wisp.mercurywork.shop/";
   }
@@ -38,7 +39,11 @@
     if (epoxyReady) return epoxyReady;
     epoxyReady = (async () => {
       const mod = await import(/* webpackIgnore: true */ epoxyUrl());
-      await (mod.default || mod.__wbg_init)();
+      if (!global.__GOAR_EPOXY_INIT) {
+        await (mod.default || mod.__wbg_init)();
+        global.__GOAR_EPOXY_INIT = true;
+      }
+      global.__GOAR_EPOXY_MOD = mod;
       const opts = new mod.EpoxyClientOptions();
       opts.wisp_v2 = false;
       opts.udp_extension_required = false;

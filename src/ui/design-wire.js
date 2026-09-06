@@ -32,7 +32,7 @@
     if (el) el.textContent = msg;
   }
 
-  let geckoMode = (window.GOAR_GECKO_MODE || "chrome").toLowerCase();
+  let geckoMode = (window.GOAR_GECKO_MODE || "live").toLowerCase();
 
   function setModeBtn() {
     const b = $("#browser-mode");
@@ -400,9 +400,13 @@
     bridgeAgentShell();
     // Always-on gecko warm once COI is present
     setTimeout(() => {
-      warmGecko();
+      try {
+        if (typeof sshReady === "function" && sshReady()) warmGecko();
+        else if (typeof startGeckoWarm === "function") startGeckoWarm();
+        else warmGecko();
+      } catch (_) { try { warmGecko(); } catch (__) {} }
       try { if (typeof paintTokenMeter === "function") paintTokenMeter(); } catch (_) {}
-    }, 800);
+    }, 12000);
     // Re-bridge after boot finishes (DOM stable)
     setTimeout(bridgeAgentShell, 2000);
     termLog("meta", "design chrome · gecko wired to #browser-frame-wrap");

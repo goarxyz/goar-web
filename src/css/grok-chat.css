@@ -385,6 +385,27 @@ body.rail-open #rail-scrim[hidden] {
   padding: 6px 6px 6px 8px;
   box-shadow: 0 8px 32px rgba(0,0,0,.28);
 }
+.chat-legal {
+  max-width: 720px;
+  margin: 8px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #6d6d70;
+  user-select: none;
+}
+.chat-legal a {
+  color: inherit;
+  text-decoration: none;
+  padding: 6px 4px;
+  border-radius: 4px;
+}
+.chat-legal a:hover { color: #b4b4b7; }
+.chat-legal span { opacity: .5; font-size: 9px; }
 #chat-plus {
   width: 36px;
   height: 36px;
@@ -694,7 +715,7 @@ html body:not(.view-term) #term-tab,
 html body:not(.view-term) #term-tab.open { display: none !important; }
 html body.view-term #term-tab,
 html body.view-term #term-tab.open { display: flex !important; flex-direction: column; pointer-events: auto !important; opacity: 1 !important; }
-#term-stage { flex: 1; min-height: 0; width: 100%; height: 100%; position: relative; pointer-events: auto !important; }
+#term-stage { flex: 1; min-height: 0; width: 100%; height: auto; position: relative; pointer-events: auto !important; }
 #term-stage #terminal,
 #term-tab #terminal.live {
   width: 100% !important;
@@ -760,10 +781,8 @@ html body.view-creative #creative-tab.open { display: flex !important; }
 }
 .cr-empty { grid-column: 1 / -1; color: #555; font-size: 13px; padding: 32px 8px; }
 .cr-card { margin: 0; cursor: pointer; background: #0a0a0a; border: 1px solid #1a1a1a; border-radius: 10px; overflow: hidden; }
-.cr-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; filter: grayscale(1); }
+.cr-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
 .cr-card figcaption { padding: 8px 10px 10px; font-size: 11px; color: #888; line-height: 1.35; }
-  pointer-events: auto !important;
-}
 #term-stage .xterm-helper-textarea {
   left: 0 !important;
   top: 0 !important;

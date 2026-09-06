@@ -49,9 +49,6 @@ function heavyAssetList() {
       add(HEAVY.epoxy);
     }
   } catch (_) {}
-  add("./assets/pyodide/pyodide.asm.wasm");
-  add("./assets/pyodide/python_stdlib.zip");
-  add("./assets/pyodide/pyodide.mjs");
   add("./assets/unix/goar-box.wasm");
   add("./assets/jit/goar-jit.wasm");
   try {
@@ -75,12 +72,17 @@ function startHeavyWarm() {
 
 function startGeckoWarm() {
   if (window.__GOAR_GECKO_WARM) return window.__GOAR_GECKO_WARM;
-  if (typeof ensureGecko !== "function") return Promise.resolve(null);
-  const url = window.GOAR_GECKO_HOME || "https://html.duckduckgo.com/html/";
-  window.__GOAR_GECKO_WARM = ensureGecko({ mode: "embed", show: false, url }).catch((e) => {
-    console.warn("[goar] gecko warm", e);
+  const url = window.GOAR_GECKO_HOME || "about:home";
+  window.__GOAR_GECKO_WARM = (async function () {
+    try {
+      if (typeof ensureGecko === "function") {
+        return await ensureGecko({ mode: "live", show: false, url: url });
+      }
+    } catch (e) {
+      console.warn("[goar] browser warm", e);
+    }
     return null;
-  });
+  })();
   return window.__GOAR_GECKO_WARM;
 }
 

@@ -18,12 +18,18 @@
   let ready = null;
 
   function boxUrl() {
-    if (typeof goarAssetUrl === "function") return goarAssetUrl("assets/unix/goar-box.wasm");
-    return "./assets/unix/goar-box.wasm";
+    try {
+      return new URL("./assets/unix/goar-box.wasm", document.baseURI || location.href).href;
+    } catch (_) {
+      return "./assets/unix/goar-box.wasm";
+    }
   }
   function shimUrl() {
-    if (typeof goarAssetUrl === "function") return goarAssetUrl("assets/unix/wasi/index.js");
-    return "./assets/unix/wasi/index.js";
+    try {
+      return new URL("./assets/unix/wasi/index.js", document.baseURI || location.href).href;
+    } catch (_) {
+      return "./assets/unix/wasi/index.js";
+    }
   }
 
   async function ensureBox() {
@@ -42,6 +48,8 @@
       return true;
     })().catch((e) => {
       ready = null;
+      shim = null;
+      wasmMod = null;
       console.warn("[goar] WASI box", e);
       return false;
     });

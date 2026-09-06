@@ -171,7 +171,10 @@ function formatSteer(list) {
 function paintLiveWork(patch) {
   const el = document.getElementById("live-work");
   const text = document.getElementById("live-work-text");
-  const running = typeof agentBusy !== "undefined" && !!agentBusy;
+  const running = (typeof agentBusy !== "undefined" && !!agentBusy)
+    || (typeof agentAbort !== "undefined" && !!agentAbort)
+    || !!(typeof document !== "undefined" && document.body && document.body.classList.contains("agent-running"))
+    || !!(patch && patch.text);
   if (el) el.hidden = !running;
   if (!text) return;
   let label = "";
@@ -189,7 +192,8 @@ function paintLiveWork(patch) {
 }
 
 function paintComposerMode() {
-  const running = typeof agentBusy !== "undefined" && !!agentBusy;
+  const running = (typeof agentBusy !== "undefined" && !!agentBusy)
+    || (typeof document !== "undefined" && document.body && document.body.classList.contains("agent-running"));
   const box = document.querySelector("#input-wrap .input-box");
   const send = document.getElementById("send-btn");
   const input = document.getElementById("msg-input");

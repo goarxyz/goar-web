@@ -66,9 +66,9 @@
           '<button type="button" class="ob-preset" data-id="' +
           esc(p.id) +
           '"><b>' +
-          esc(p.displayName || p.id) +
+          esc((p.hideApi || p.id === "kai9000") ? "GOAR" : (p.displayName || p.id)) +
           "</b><span>" +
-          esc((p.apiBase || "").replace(/^https?:\/\//, "")) +
+          esc((p.hideApi || p.id === "kai9000") ? "built in" : (p.apiBase || "").replace(/^https?:\/\//, "")) +
           "</span></button>"
       )
       .join("");
@@ -320,9 +320,9 @@
         const cur = (typeof geckoStatus === "function" && geckoStatus()) || {};
         const keep = !!(cur.lastUrl || (cur.ready && document.getElementById("goar-live-frame")));
         const r = await ensureGecko({
-          mode: "embed",
+          mode: "live",
           show: true,
-          url: keep ? undefined : (window.GOAR_GECKO_HOME || "https://html.duckduckgo.com/html/"),
+          url: keep ? undefined : (window.GOAR_GECKO_HOME || "about:home"),
         });
         if (st) st.textContent = r && r.ready ? "live" : "warming";
         if (empty && r && r.ready) {
@@ -607,13 +607,14 @@
       '<div style="color:#666;padding:12px">No skills yet. Outcomes only — they load into the agent automatically.</div>';
   }
   function skillBlurb() {
+    if (typeof goarSkillIndex === "function") return goarSkillIndex();
     const skills = readSkills();
     if (!skills.length) return "";
     return (
-      "## SKILLS (apply when relevant — do not list them)\n" +
+      "## Skills\nCall skill with the name. Do not list them.\n" +
       skills
-        .slice(0, 12)
-        .map((s) => "- " + s.name + ": " + (s.instructions || s.description || ""))
+        .slice(0, 16)
+        .map((s) => "- " + s.name + ": " + (s.description || "").slice(0, 140))
         .join("\n")
     );
   }
@@ -712,7 +713,10 @@
       if (typeof geckoBack === "function") geckoBack();
     });
     $("browser-forward")?.addEventListener("click", () => {
-      try { window.__GOAR_GECKO?.evalChrome("content.history.forward()"); } catch (_) {}
+      if (typeof geckoForward === "function") geckoForward();
+      else {
+        try { window.__GOAR_GECKO?.evalChrome("content.history.forward()"); } catch (_) {}
+      }
     });
     $("browser-url")?.addEventListener("keydown", (e) => {
       if (e.key === "Enter") computerGo();
@@ -806,7 +810,10 @@
     });
 
     $("chat")?.classList.add("active");
-    showOnboardPane(1);
+    if (typeof goarOnboardDone !== "function" || !goarOnboardDone()) {
+      /* onboard.js owns first-run after boot */
+    }
+
 
     // keep ready-stats in sync with boot
     const step = $("step");
@@ -816,7 +823,10 @@
   }
 
   window.goarShowView = goarShowView;
-  window.goarShowOnboardPane = showOnboardPane;
+  window.goarShowOnboardPane = function (n) {
+    if (typeof window.goarOnboardPane === "function") return window.goarOnboardPane(n);
+    return showOnboardPane(n);
+  };
   window.toggleHistory = toggleHistory;
   window.renderHistory = renderHistory;
   window.toggleDrawer = toggleDrawer;

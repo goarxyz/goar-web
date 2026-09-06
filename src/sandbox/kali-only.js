@@ -5,8 +5,9 @@
   "use strict";
   function sshLive() {
     try {
+      if (typeof sshShellReady === "function") return sshShellReady();
       if (typeof sshReady === "function" && sshReady()) return true;
-      if (global.SSH && global.SSH.ready) return true;
+      if (global.SSH && global.SSH.ready && global.SSH.hello) return true;
     } catch (_) {}
     return false;
   }
@@ -25,9 +26,15 @@
     timeoutMs = timeoutMs == null ? 180000 : timeoutMs;
     await bringKali("guestExec");
     if (typeof sshExec === "function" && sshLive()) return sshExec(command, timeoutMs);
+    if (typeof unixExec === "function" && global.Unix && global.Unix.ready) {
+      try {
+        const r = await unixExec(command, timeoutMs);
+        return { code: r && r.code, output: (r && r.output) || "", via: "busybox" };
+      } catch (_) {}
+    }
     let err = "connecting";
     try { if (typeof sshStatus === "function") err = (sshStatus() || {}).lastError || err; } catch (_) {}
-    return dead("Kali SSH not ready (" + err + "). Agent will not use pysec/pyodide.");
+    return dead("Kali SSH not ready (" + err + "). Local plane is BusyBox, not Pyodide.");
   };
   global.toolBash = async function toolBash(args) {
     args = args && typeof args === "object" ? args : {};

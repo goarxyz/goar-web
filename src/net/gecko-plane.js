@@ -36,6 +36,27 @@
     chromeUrl: "",
   };
 
+  const LIVE = {
+    hist: [],
+    idx: -1,
+  };
+
+  function absUrl(url) {
+    let target = String(url || "").trim();
+    if (!target) return "";
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(target)) target = "https://" + target;
+    return target;
+  }
+
+  function isIframeFriendly(url) {
+    try {
+      const h = new URL(url).hostname.replace(/^www\./, "");
+      return /^(html\.)?duckduckgo\.com$|example\.com$|pollinations\.ai$|archive\.org$|w3\.org$|mozilla\.org$/.test(h);
+    } catch (_) {
+      return false;
+    }
+  }
+
   function assetBase() {
     if (typeof GOAR_REMOTE === "string" && GOAR_REMOTE) return GOAR_REMOTE;
     if (typeof goarAssetUrl === "function") {
@@ -236,14 +257,20 @@
   }
 
   function geckoHide() {
+    const f = document.getElementById("goar-live-frame");
+    if (f) f.style.display = "none";
     if (STATE.pane) STATE.pane.style.display = "none";
   }
   function geckoShow() {
-    ensurePane(true, STATE.mode);
-    if (STATE.mode === "chrome") sizeChromeIframe();
-    fitGecko().then(function () {
-      try { STATE.canvas && STATE.canvas.focus(); } catch (_) {}
-    }).catch(function () {});
+    liveFrame();
+    const f = document.getElementById("goar-live-frame");
+    if (f) f.style.display = "block";
+    if (STATE.gecko) {
+      ensurePane(true, STATE.mode);
+      fitGecko().then(function () {
+        try { STATE.canvas && STATE.canvas.focus(); } catch (_) {}
+      }).catch(function () {});
+    }
   }
 
   function geckoReset() {
@@ -637,38 +664,34 @@
 
   async function ensureGecko(opts) {
     opts = opts || {};
-    const mode = String((opts.mode || global.GOAR_GECKO_MODE || "embed")).toLowerCase() === "chrome" ? "chrome" : "embed";
+    const home = opts.url || global.GOAR_GECKO_HOME || "about:home";
+    const wantWasm = !!(opts.wasm || opts.forceWasm || global.GOAR_GECKO_FORCE);
 
-    if (opts.force) geckoReset();
-
-    if (STATE.ready && STATE.mode === mode && !opts.force) {
+    if (STATE.ready && STATE.mode === "live" && !opts.force && !wantWasm) {
       if (opts.show !== false) geckoShow();
-      if (opts.url) await geckoLoad(opts.url);
+      if (opts.url) await liveNavigate(opts.url);
       return geckoStatus();
-    }
-
-    // mode switch without force
-    if (STATE.ready && STATE.mode && STATE.mode !== mode) {
-      geckoReset();
     }
 
     if (STATE.loading) return STATE.loading;
 
     STATE.loading = (async () => {
       STATE.lastError = "";
-      const home = opts.url || global.GOAR_GECKO_HOME || "https://html.duckduckgo.com/html/";
-      try { await liveNavigate(home); } catch (e) { console.warn("[goar] live browser", e); }
       try {
-        if (!coiOk()) {
-          try { global.GOAR_GECKO_NOWASMJIT = "1"; } catch (_) {}
+        await liveNavigate(home);
+        STATE.ready = true;
+        STATE.mode = "live";
+        if (wantWasm && coiOk()) {
+          bootEmbed(Object.assign({}, opts, { show: false })).catch(function (e) {
+            console.warn("[goar] gecko wasm", e);
+          });
         }
-        if (mode === "chrome") return await bootChrome(opts);
-        return await bootEmbed(opts);
+        return geckoStatus();
       } catch (e) {
         STATE.lastError = String(e && e.message ? e.message : e);
-        STATE.mode = STATE.mode || "live";
+        STATE.mode = "live";
         STATE.ready = true;
-        console.error("[goar] gecko init failed", e);
+        console.error("[goar] browser init", e);
         return geckoStatus();
       } finally {
         STATE.loading = null;
@@ -679,67 +702,38 @@
   }
 
   async function geckoLoad(url) {
-    const u = String(url || "").trim();
-    if (!u) return { ok: false, error: "url required" };
-    let target = u;
-    if (!/^[a-z][a-z0-9+.-]*:/i.test(target)) target = "https://" + target;
-
-    if (!STATE.ready) {
-      await ensureGecko({ show: true, url: target, mode: STATE.mode || "embed" });
-    }
-    try { await liveNavigate(target); } catch (_) {}
-    if (!STATE.gecko && STATE.mode !== "chrome") {
-      return { ok: true, mode: "live", url: target, ...geckoStatus() };
-    }
-
+    const target = absUrl(url);
+    if (!target) return { ok: false, error: "url required" };
+    if (!STATE.ready) await ensureGecko({ show: true, url: target });
+    else await liveNavigate(target);
     showSharedBrowser();
-    if (STATE.mode === "chrome" && STATE.iframe) {
-      try {
-        const win = STATE.iframe.contentWindow;
-        if (win && typeof win.geckoLoad === "function") {
-          await win.geckoLoad(target);
-          STATE.lastUrl = target;
-          setUrlLabel(target);
-          return { ok: true, mode: "chrome", url: target, ...geckoStatus() };
-        }
-        try {
-          win.localStorage.setItem("libxul-demo-url", target);
-        } catch (_) {}
-        STATE.lastUrl = target;
-        setUrlLabel(target);
-        return { ok: true, mode: "chrome", pending: true, url: target, ...geckoStatus() };
-      } catch (e) {
-        return { ok: false, error: String(e && e.message ? e.message : e), ...geckoStatus() };
-      }
-    }
-
-    if (STATE.gecko && typeof STATE.gecko.load === "function") {
-      await Promise.race([
-        STATE.gecko.load(target),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("gecko load timeout")), 14000)),
-      ]);
-      STATE.lastUrl = target;
-      setUrlLabel(target);
-      try {
-        if (typeof ensureGeckoDev === "function") ensureGeckoDev().catch(() => {});
-      } catch (_) {}
-      return { ok: true, mode: "embed", url: target, ...geckoStatus() };
-    }
-    return { ok: false, error: "no gecko engine", ...geckoStatus() };
+    return { ok: true, mode: "live", url: target, ...geckoStatus() };
   }
 
   async function geckoBack() {
-    if (STATE.gecko && typeof STATE.gecko.evalChrome === "function") {
-      try { await STATE.gecko.evalChrome("content.history.back()"); } catch (_) {
-        try { await STATE.gecko.evalChrome("window.back()"); } catch (e) {}
-      }
+    if (LIVE.idx > 0) {
+      LIVE.idx -= 1;
+      return liveNavigate(LIVE.hist[LIVE.idx], { push: false });
     }
+    const f = document.getElementById("goar-live-frame");
+    try { if (f && f.contentWindow) f.contentWindow.history.back(); } catch (_) {}
     return geckoStatus();
   }
-  async function geckoReload() {
-    if (STATE.lastUrl && STATE.gecko && typeof STATE.gecko.load === "function") {
-      await STATE.gecko.load(STATE.lastUrl);
+
+  async function geckoForward() {
+    if (LIVE.idx >= 0 && LIVE.idx < LIVE.hist.length - 1) {
+      LIVE.idx += 1;
+      return liveNavigate(LIVE.hist[LIVE.idx], { push: false });
     }
+    const f = document.getElementById("goar-live-frame");
+    try { if (f && f.contentWindow) f.contentWindow.history.forward(); } catch (_) {}
+    return geckoStatus();
+  }
+
+  async function geckoReload() {
+    if (STATE.lastUrl) return liveNavigate(STATE.lastUrl, { push: false });
+    const f = document.getElementById("goar-live-frame");
+    try { if (f && f.contentWindow) f.contentWindow.location.reload(); } catch (_) {}
     return geckoStatus();
   }
 
@@ -759,14 +753,9 @@
       wasmUrl: STATE.wasmUrl || geckoWasmUrl(),
       chromeUrl: STATE.chromeUrl || chromeDemoUrl(resolveGeckoWisp()),
       independent_of_v86: true,
-      note: !coiOk()
-        ? "Always-on plane F — waiting COOP+COEP for SharedArrayBuffer"
-        : STATE.ready
-          ? "Live · " +
-            (STATE.mode || "?") +
-            " · host " +
-            (STATE.host ? STATE.host.id || "design" : "float")
-          : "Always-on plane F — warming",
+      note: STATE.ready
+        ? "Live browser · " + (STATE.lastUrl || "")
+        : "Browser warming",
     };
   }
 
@@ -808,49 +797,216 @@
   function liveFrame() {
     const wrap = document.getElementById("browser-frame-wrap");
     if (!wrap) return null;
+    STATE.host = wrap;
+    try {
+      const cs = getComputedStyle(wrap);
+      if (cs.position === "static") wrap.style.position = "relative";
+    } catch (_) {
+      wrap.style.position = "relative";
+    }
     let f = document.getElementById("goar-live-frame");
     if (!f) {
       f = document.createElement("iframe");
       f.id = "goar-live-frame";
       f.title = "Browser";
       f.referrerPolicy = "no-referrer";
-      f.setAttribute("sandbox", "allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox");
+      f.setAttribute("sandbox", "allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads");
+      wrap.appendChild(f);
+    } else if (f.parentElement !== wrap) {
       wrap.appendChild(f);
     }
     f.style.cssText =
-      "position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff;display:block;z-index:5;pointer-events:auto";
+      "position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff;display:block;z-index:8;pointer-events:auto;color-scheme:light";
+    try {
+      const pane = document.getElementById("geckoPane");
+      if (pane) pane.style.display = "none";
+    } catch (_) {}
+    try {
+      const empty = document.getElementById("browser-empty");
+      if (empty) {
+        empty.classList.add("hidden");
+        empty.style.display = "none";
+      }
+    } catch (_) {}
+    try { document.body.classList.add("gecko-live"); } catch (_) {}
     return f;
   }
 
-  async function liveNavigate(url) {
-    const u = String(url || "").trim();
-    if (!u) return { ok: false, error: "url required" };
-    let target = u;
-    if (!/^[a-z][a-z0-9+.-]*:/i.test(target)) target = "https://" + target;
+  function startPageHtml() {
+    return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"color-scheme\" content=\"light\"><style>" +
+      "html,body{margin:0;background:#f6f6f7;color:#111;font:16px/1.5 system-ui,sans-serif}" +
+      "main{max-width:560px;margin:14vh auto;padding:0 24px}" +
+      "h1{font-size:28px;letter-spacing:-.04em;margin:0 0 8px}" +
+      "p{color:#555;margin:0 0 18px}" +
+      "a{color:#111}" +
+      ".row{display:flex;flex-wrap:wrap;gap:10px}" +
+      ".row a{display:inline-block;padding:10px 14px;border:1px solid #ddd;border-radius:10px;background:#fff;text-decoration:none}" +
+      "</style></head><body><main><h1>GOAR</h1>" +
+      "<p>Type an address in the bar, or open a site.</p>" +
+      "<div class=\"row\">" +
+      "<a href=\"https://example.com/\">example.com</a>" +
+      "<a href=\"https://en.wikipedia.org/wiki/Main_Page\">Wikipedia</a>" +
+      "<a href=\"https://html.duckduckgo.com/html/\">DuckDuckGo</a>" +
+      "</div></main></body></html>";
+  }
+
+  function loadingHtml(url) {
+    const u = String(url || "").replace(/</g, "");
+    return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"color-scheme\" content=\"light\">" +
+      "<style>html,body{margin:0;background:#fff;color:#222;font:15px/1.5 system-ui,sans-serif}" +
+      "main{padding:48px 28px;color:#666}</style></head><body><main>Loading " + u + "…</main></body></html>";
+  }
+
+  function errorHtml(url, err) {
+    const u = String(url || "").replace(/</g, "");
+    const e = String(err || "Could not load").replace(/</g, "");
+    return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"color-scheme\" content=\"light\">" +
+      "<style>html,body{margin:0;background:#fff;color:#111;font:15px/1.5 system-ui,sans-serif}" +
+      "main{max-width:560px;margin:12vh auto;padding:0 24px}a{color:#111}</style></head><body><main>" +
+      "<h1>Can't open this page</h1><p>" + e + "</p><p><code>" + u + "</code></p>" +
+      "<p><a href=\"https://example.com/\">Open example.com</a></p></main></body></html>";
+  }
+
+  function looksHtml(s) {
+    const t = String(s || "");
+    if (t.length < 40) return false;
+    if (/^\s*\{/.test(t) && /"error"|"message"/.test(t)) return false;
+    return /<html|<body|<div|<main|<article|<section|<p[\s>]|<h1/i.test(t);
+  }
+
+  function rewriteSrcdoc(html, url) {
+    let out = String(html || "");
+    out = out.replace(new RegExp("<script[\\s\\S]*?<" + "/script>", "gi"), "");
+    out = out.replace(/<meta[^>]+http-equiv=["']?Content-Security-Policy["']?[^>]*>/gi, "");
+    const base = "<base href=" + JSON.stringify(url) + ">";
+    const meta = "<meta name=\"color-scheme\" content=\"light\">";
+    const paint = "<style>html,body{background:#fff!important;color:#111!important;color-scheme:light!important}</style>";
+    const bridge =
+      "<script>(function(){function go(u){try{parent.postMessage({goarNav:u},'*')}catch(e){}}document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[href]');if(!a)return;var h=a.getAttribute('href')||a.href;if(!h||h.indexOf('javascript:')===0)return;if(h.charAt(0)==='#')return;e.preventDefault();try{go(new URL(h,location.href).toString())}catch(err){go(a.href)}},true);document.addEventListener('submit',function(e){var f=e.target;if(!f||f.tagName!=='FORM')return;e.preventDefault();try{var u=new URL(f.action||location.href);if(String(f.method||'get').toLowerCase()!=='post'){var fd=new FormData(f);fd.forEach(function(v,k){u.searchParams.set(k,v)});go(u.toString())}else go(u.toString())}catch(err){}},true);})();<\/script>";
+    if (/<head/i.test(out)) return out.replace(/<head([^>]*)>/i, "<head$1>" + meta + paint + base + bridge);
+    return "<!doctype html><html><head>" + meta + paint + base + bridge + "</head><body>" + out + "</body></html>";
+  }
+
+  function paintFrame(f, html) {
+    if (!f) return;
+    try { f.removeAttribute("src"); } catch (_) {}
+    f.srcdoc = html;
+  }
+
+  function pushHist(url) {
+    if (LIVE.idx >= 0 && LIVE.hist[LIVE.idx] === url) return;
+    if (LIVE.idx < LIVE.hist.length - 1) LIVE.hist = LIVE.hist.slice(0, LIVE.idx + 1);
+    LIVE.hist.push(url);
+    LIVE.idx = LIVE.hist.length - 1;
+  }
+
+  async function fetchVia(url, fn) {
+    try {
+      const r = await Promise.race([
+        fn(),
+        new Promise(function (_, rej) { setTimeout(function () { rej(new Error("timeout")); }, 14000); }),
+      ]);
+      if (!r) return "";
+      const body = typeof r === "string" ? r : (r.body || r.text || "");
+      return looksHtml(body) ? String(body) : "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  async function fetchPageHtml(url) {
+    let html = "";
+    try {
+      if (typeof ensureMwFabric === "function") await Promise.race([
+        ensureMwFabric(),
+        new Promise(function (r) { setTimeout(r, 4000); }),
+      ]);
+    } catch (_) {}
+
+    if (typeof goarHostFetch === "function") {
+      html = await fetchVia(url, function () { return goarHostFetch(url, { method: "GET", maxBytes: 400000 }); });
+      if (html) return html;
+    }
+
+    try {
+      const fab = (typeof MW_FABRIC !== "undefined" && MW_FABRIC) || (global.MW_FABRIC);
+      const curl = fab && fab.libcurl && fab.libcurl.fetch;
+      if (curl) {
+        html = await fetchVia(url, async function () {
+          const res = await curl.call(fab.libcurl, url, { method: "GET" });
+          return { body: await res.text() };
+        });
+        if (html) return html;
+      }
+    } catch (_) {}
+
+    try {
+      if (typeof manusHttpFetch === "function") {
+        html = await fetchVia(url, function () { return manusHttpFetch(url, { method: "GET" }); });
+        if (html) return html;
+      }
+    } catch (_) {}
+
+    const proxies = [
+      "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
+      "https://corsproxy.io/?" + encodeURIComponent(url),
+    ];
+    for (let i = 0; i < proxies.length; i++) {
+      html = await fetchVia(proxies[i], async function () {
+        const resp = await fetch(proxies[i], { method: "GET" });
+        return { body: await resp.text() };
+      });
+      if (html) return html;
+    }
+    return "";
+  }
+
+  async function liveNavigate(url, opts) {
+    opts = opts || {};
+    const raw = String(url || "").trim();
+    const home = !raw || raw === "about:home" || raw === "about:blank" || raw === "goar:home";
+    const target = home ? "about:home" : absUrl(raw);
+    if (!target) return { ok: false, error: "url required" };
     const f = liveFrame();
     if (!f) return { ok: false, error: "no browser host" };
-    let hop = target;
-    try {
-      if (typeof buildManusProxyUrl === "function") hop = buildManusProxyUrl(target);
-    } catch (_) {}
-    try {
-      const fetchFn = typeof goarApiFetch === "function" ? goarApiFetch : fetch;
-      const resp = await fetchFn(target, { method: "GET" });
-      const html = await resp.text();
-      const base = "<base href=" + JSON.stringify(target) + ">";
-      const doc = /<head/i.test(html) ? html.replace(/<head([^>]*)>/i, "<head$1>" + base) : base + html;
-      f.removeAttribute("src");
-      f.srcdoc = doc;
-    } catch (_) {
-      f.removeAttribute("srcdoc");
-      f.src = hop;
-    }
-    STATE.lastUrl = target;
-    STATE.mode = STATE.mode || "live";
+    if (opts.push !== false) pushHist(target);
+    STATE.lastUrl = home ? "about:home" : target;
+    STATE.mode = "live";
     STATE.ready = true;
-    setUrlLabel(target);
-    return { ok: true, mode: "live", url: target };
+    STATE.lastError = "";
+    setUrlLabel(home ? "" : target);
+
+    if (home) {
+      paintFrame(f, rewriteSrcdoc(startPageHtml(), "https://example.com/"));
+      return { ok: true, mode: "live", url: "about:home", via: "home" };
+    }
+
+    paintFrame(f, loadingHtml(target));
+
+    const html = await fetchPageHtml(target);
+    if (html) {
+      paintFrame(f, rewriteSrcdoc(html, target));
+      return { ok: true, mode: "live", url: target, via: "srcdoc" };
+    }
+
+    if (isIframeFriendly(target)) {
+      try { f.removeAttribute("srcdoc"); } catch (_) {}
+      f.src = target;
+      return { ok: true, mode: "live", url: target, via: "iframe" };
+    }
+
+    paintFrame(f, errorHtml(target, "The page did not return HTML."));
+    STATE.lastError = "no html";
+    return { ok: false, mode: "live", url: target, via: "error" };
   }
+
+  try {
+    window.addEventListener("message", function (ev) {
+      const d = ev && ev.data;
+      if (!d || !d.goarNav) return;
+      liveNavigate(String(d.goarNav)).catch(function () {});
+    });
+  } catch (_) {}
 
   function showSharedBrowser() {
     try {
@@ -939,15 +1095,16 @@
     return { ok: true, key: k };
   }
 
-  async function geckoEval(js) {
+  async function geckoEval(js, maxLen) {
     if (!STATE.ready) await ensureGecko({ show: true });
     showSharedBrowser();
     const g = STATE.gecko;
     if (!g || typeof g.evalChrome !== "function") {
       return { ok: false, error: "eval needs embed Gecko" };
     }
+    const cap = Math.max(4000, Number(maxLen) || 8000);
     const out = await g.evalChrome(String(js || ""));
-    return { ok: true, result: String(out == null ? "" : out).slice(0, 8000) };
+    return { ok: true, result: String(out == null ? "" : out).slice(0, cap) };
   }
 
   async function geckoShot() {
@@ -988,6 +1145,7 @@
   global.geckoHide = geckoHide;
   global.geckoShow = geckoShow;
   global.geckoBack = geckoBack;
+  global.geckoForward = geckoForward;
   global.geckoReload = geckoReload;
   global.fitGecko = fitGecko;
   global.sizeChromeIframe = sizeChromeIframe;
@@ -1005,7 +1163,7 @@
     const budget = Math.max(2000, Number(ms) || 20000);
     const t0 = Date.now();
     if (typeof ensureGecko === "function") {
-      ensureGecko({ mode: "embed", show: false }).catch(() => {});
+      ensureGecko({ mode: "live", show: false }).catch(() => {});
     }
     while (Date.now() - t0 < budget) {
       const g = geckoStatus();

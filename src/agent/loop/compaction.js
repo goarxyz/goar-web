@@ -81,12 +81,22 @@ function pinMission(userText, opts) {
   if (!t) return;
   if (opts && opts.force) {
     agentState.mission = t;
-    return;
-  }
-  if (!agentState.mission || agentState.missionClosed) {
+    agentState.missionClosed = false;
+  } else if (!agentState.mission || agentState.missionClosed) {
     agentState.mission = t;
     agentState.missionClosed = false;
   }
+  try {
+    const small = typeof vibeIsSmallTalk === "function" && vibeIsSmallTalk(t);
+    const work = /\b(explor|list|build|fix|implement|review|write|create|scan|test|code|file|workspace|tool)\b/i.test(t);
+    if (!small && work && (!agentState.todos || !agentState.todos.length)) {
+      agentState.todos = [
+        { text: "Orient with tools", done: false },
+        { text: "Do the request", done: false },
+        { text: "Verify and report", done: false },
+      ];
+    }
+  } catch (_) {}
 }
 
 function clearMission() {

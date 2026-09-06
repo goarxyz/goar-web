@@ -13,6 +13,7 @@ function openSettings() {
   try { fillSettingsForm(); } catch (e) { console.warn(e); }
   try { refreshCacheStats(); } catch (_) {}
   try { paintFreezeStatus(); } catch (_) {}
+  try { if (typeof fillMcpForm === "function") fillMcpForm(); } catch (_) {}
   const box = document.getElementById("settings");
   if (box) {
     box.classList.add("open");

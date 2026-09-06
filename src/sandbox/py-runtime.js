@@ -440,6 +440,9 @@ if not hasattr(hashlib, "pbkdf2_hmac"):
   }
 
   async function pyBoot() {
+    if (global.GOAR_SKIP_PYODIDE || global.GOAR_KALI_ONLY) {
+      return Promise.reject(new Error("pyodide disabled — workspace is Kali / BusyBox"));
+    }
     if (ready) return ready;
     ready = (async () => {
       let indexURL = "./assets/pyodide/";

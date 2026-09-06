@@ -16,6 +16,7 @@ files = [
     "src/css/grok-chat.css",
     "src/css/particles-layer.css",
     "src/css/mono-jet.css",
+    "src/css/polish.css",
     "src/vendor/xterm.js",
     "src/vendor/xterm-addon-fit.js",
     "src/vendor/xterm-addon-web-links.js",

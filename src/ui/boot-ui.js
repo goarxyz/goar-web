@@ -48,9 +48,15 @@ function reflectActiveModel(model, provider) {
   applySel(document.getElementById("model-input"));
   applySel(document.getElementById("apiModel"));
   const am = document.getElementById("active-model");
-  if (am) am.textContent = m ? (p ? p + " · " + m : m) : "";
+  const label = (typeof publicModelName === "function")
+    ? publicModelName(m, p)
+    : (p === "kai9000" ? "GOAR" : (m ? (p ? p + " · " + m : m) : ""));
+  const shown = (p === "kai9000" || (typeof isHiddenApiProvider === "function" && isHiddenApiProvider(p)))
+    ? "GOAR"
+    : (typeof publicProviderName === "function" ? publicProviderName(p) + (m && p !== "kai9000" ? " · " + m : "") : label);
+  if (am) am.textContent = shown;
   const dm = document.getElementById("drawer-model");
-  if (dm) dm.textContent = m ? (p ? p + " · " + m : m) : "auto";
+  if (dm) dm.textContent = shown || "GOAR";
   try { if (typeof syncIndicators === "function") syncIndicators({ model: m }); } catch (_) {}
 }
 
@@ -73,7 +79,9 @@ function fillProviderSelect(sel, selected) {
   list.forEach((p) => {
     const o = document.createElement("option");
     o.value = p.id;
-    o.textContent = p.displayName || p.id;
+    o.textContent = (p.hideApi || p.id === "kai9000")
+      ? "GOAR"
+      : (typeof publicProviderName === "function" ? publicProviderName(p.id) : (p.displayName || p.id));
     sel.appendChild(o);
   });
   if (cur && [...sel.options].some((o) => o.value === cur)) sel.value = cur;
@@ -93,22 +101,25 @@ function setCredReady(ok, msg) {
 function showCredPhase() {
   try { if (typeof startHeavyWarm === "function") startHeavyWarm(); } catch (_) {}
   try { if (typeof startGeckoWarm === "function") startGeckoWarm(); } catch (_) {}
-  if (typeof goarMotion !== "undefined" && goarMotion.toCred) {
-    goarMotion.toCred();
-  } else {
-    const bp = document.getElementById("bootPhase");
-    const cp = document.getElementById("credPhase");
-    if (bp) {
-      bp.hidden = true;
-      bp.style.display = "none";
+  const onboard = document.getElementById("onboard");
+  const inOnboard = !!(onboard && !onboard.hidden && onboard.classList.contains("on"));
+  if (!inOnboard) {
+    if (typeof goarMotion !== "undefined" && goarMotion.toCred) {
+      goarMotion.toCred();
+    } else {
+      const bp = document.getElementById("bootPhase");
+      const cp = document.getElementById("credPhase");
+      if (bp) {
+        bp.hidden = true;
+        bp.style.display = "none";
+      }
+      if (cp) {
+        cp.hidden = false;
+        cp.removeAttribute("hidden");
+        cp.classList.add("on", "show");
+      }
     }
-    if (cp) {
-      cp.hidden = false;
-      cp.removeAttribute("hidden");
-      cp.classList.add("on", "show");
-    }
-  }
-  try {
+  }  try {
     const s = settingsSnapshot();
     const p = document.getElementById("credProvider");
     const k = document.getElementById("credKey");
@@ -174,7 +185,7 @@ function applyCredProvider() {
   const hint = document.querySelector("#credPhase .hint");
   if (hint) {
     hint.textContent = noKey
-      ? "Free.ai demo · 30,000 tokens per day · no key · switch provider anytime"
+      ? ((prov && (prov.hideApi || prov.id === "kai9000")) ? "GOAR is ready — no key" : "No key needed · switch provider anytime")
       : "Provider + API key · models load live from your API";
   }
 }
@@ -278,7 +289,7 @@ function syncInAppProviderBar(provider, apiKey, apiModel, ids) {
       const noKey = typeof providerAllowsEmptyKey === "function" ? providerAllowsEmptyKey(provider) : !apiKey;
       status.textContent = apiKey
         ? (ids && ids.length ? ids.length + " models" : "key set")
-        : (noKey ? (ids && ids.length ? ids.length + " models · demo" : "Free.ai demo") : "no key");
+        : (noKey ? (provider === "kai9000" || (typeof isHiddenApiProvider === "function" && isHiddenApiProvider(provider)) ? "GOAR ready" : (ids && ids.length ? ids.length + " models · demo" : "ready")) : "no key");
       status.classList.toggle("ok", !!(apiKey || noKey));
     }
   } catch (_) {}
@@ -334,13 +345,26 @@ async function enterChatFromCreds() {
   } catch (_) {}
   syncInAppProviderBar(provider, apiKey, apiModel, liveModels);
   reflectActiveModel(apiModel, provider);
-  setCredReady(true, "Connected · " + provider + " · " + apiModel);
+  const pub = (typeof publicProviderName === "function") ? publicProviderName(provider) : provider;
+  setCredReady(true, "Connected · " + pub);
   finishEnterChat();
 }
 
 function finishEnterChat() {
   const after = () => {
     try { document.body.classList.add("goar-ready"); } catch (_) {}
+    try {
+      const ob = document.getElementById("onboard");
+      if (ob) { ob.hidden = true; ob.classList.remove("on"); ob.style.display = "none"; }
+    } catch (_) {}
+    try {
+      const setup = document.getElementById("setup");
+      if (setup) { setup.classList.add("hide"); setup.classList.remove("open"); }
+      const boot = document.getElementById("bootPhase");
+      if (boot) { boot.hidden = true; boot.style.display = "none"; }
+      const cred = document.getElementById("credPhase");
+      if (cred) { cred.hidden = true; cred.classList.remove("on", "show"); cred.style.display = "none"; }
+    } catch (_) {}
     try { if (typeof goarShowView === "function") goarShowView("chat"); } catch (_) {}
     try { el.app.classList.add("show"); } catch (_) {}
     try { document.dispatchEvent(new CustomEvent("goar:ready")); } catch (_) {}
@@ -372,6 +396,9 @@ function finishEnterChat() {
           w.classList.add("show", "on");
         }
       }
+    } catch (_) {}
+    try {
+      if (typeof ensureSsh === "function") ensureSsh({ reason: "enter-chat" }).catch(function () {});
     } catch (_) {}
     try {
       if (typeof startGeckoWarm === "function") startGeckoWarm();
@@ -415,7 +442,7 @@ function finishEnterChat() {
       }
       // Hard probe — if guest answers, tools are live
       try {
-        if (typeof guestExec === "function") {
+        if (typeof guestExec === "function" && (typeof sshShellReady !== "function" || sshShellReady())) {
           const r = await guestExec("echo GOAR_ENV_OK; python3 -c 'print(42)'", 25000);
           if (r && (r.code === 0 || /GOAR_ENV_OK|42/.test(r.output || ""))) {
             window.__goarMarkEnvReady?.(true, "probe ok");

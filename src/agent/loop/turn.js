@@ -76,7 +76,7 @@ async function agentTurn(userText) {
       }
     };
 
-    try { if (typeof ensureScratchpad === "function") await ensureScratchpad(); } catch (_) {}
+    try { if (typeof ensureScratchpad === "function") ensureScratchpad().catch(function () {}); } catch (_) {}
     refreshSystem();
     agentHistory.push({ role: "user", content: userText });
     if (typeof maybeCompactAgentHistoryAsync === "function") await maybeCompactAgentHistoryAsync({ force: false });
@@ -158,7 +158,7 @@ async function agentTurn(userText) {
         const call = () => openaiChatStream({
         messages: (agentHistory[0] && agentHistory[0].role === "system" ? [agentHistory[0]] : []).concat(agentHistory.filter((m) => m && m.role !== "system").slice(-(Number(typeof GOAR_HISTORY_WINDOW !== "undefined" ? GOAR_HISTORY_WINDOW : 64) || 64))),
         tools: getAgentTools(),
-        includeTools: !(step === 0 && waves === 0 && typeof vibeIsSmallTalk === "function" && vibeIsSmallTalk(userText)),
+        includeTools: true,
         signal: agentAbortController.signal,
         onThinkingDelta: (piece, full) => {
           thinkingFull = collapseDoubledWords(full);
@@ -513,6 +513,7 @@ async function agentTurn(userText) {
     agentBusy = false;
     agentAbort = false;
     agentAbortController = null;
+    try { document.body.classList.remove("agent-running"); } catch (_) {}
     if (typeof paintComposerMode === "function") paintComposerMode();
     agentEl.input?.focus();
     setRunningUI(false, "");

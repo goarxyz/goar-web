@@ -32,18 +32,39 @@ function consumeAttachments() {
   ).join("");
 }
 
-function showTurnAck() {
+function hideWelcome() {
   try {
+    document.body.classList.add("goar-chatting");
     const w = document.getElementById("welcome");
     if (w) {
       w.classList.add("hide");
       w.classList.remove("show", "on");
+      w.setAttribute("hidden", "");
+      w.style.display = "none";
     }
-  } catch (_) {}
-  try {
     const es = document.getElementById("emptyState");
     if (es) es.classList.remove("on");
   } catch (_) {}
+}
+
+function hideWelcome() {
+  try {
+    document.body.classList.add("goar-chatting");
+    const w = document.getElementById("welcome");
+    if (w) {
+      w.classList.add("hide");
+      w.classList.remove("show", "on");
+      w.setAttribute("hidden", "");
+      w.style.display = "none";
+    }
+    const es = document.getElementById("emptyState");
+    if (es) es.classList.remove("on");
+  } catch (_) {}
+}
+
+function showTurnAck() {
+  hideWelcome();
+  try { document.body.classList.add("agent-running"); } catch (_) {}
   let ref = null;
   try {
     if (typeof beginStreamMsg === "function") ref = beginStreamMsg("thought");
@@ -71,6 +92,7 @@ async function sendCommand() {
     return;
   }
   if (!msg) return;
+  hideWelcome();
   if (msg === "/stop" || msg === "/abort") {
     agentEl.input.value = "";
     requestAgentStop();

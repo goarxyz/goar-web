@@ -428,6 +428,31 @@ const GOAR_API_TOOLS = [
     }, required: ["action"] }
   }},
   { type: "function", function: {
+    name: "skill",
+    description: "Load a built-in skill by name and follow it. Names: explore, implement, debug, verify, plan, git, web, browser, kali, recon, review, frontend, desktop, parallel. Empty name lists the index.",
+    parameters: { type: "object", properties: {
+      name: { type: "string", description: "Skill name, or list" }
+    } }
+  }},
+  { type: "function", function: {
+    name: "task",
+    description: "Launch a subagent for isolated multi-step research. Self-contained prompt. You summarize the result; do not dump it.",
+    parameters: { type: "object", properties: {
+      description: { type: "string", description: "What the subagent should do" },
+      prompt: { type: "string" },
+      instructions: { type: "string" },
+      name: { type: "string" }
+    }, required: ["description"] }
+  }},
+  { type: "function", function: {
+    name: "create_plan",
+    description: "Set a multi-step plan for the current mission. Then execute; update_plan_step as you go.",
+    parameters: { type: "object", properties: {
+      goal: { type: "string" },
+      steps: { type: "array", items: { type: "string" } }
+    }, required: ["goal", "steps"] }
+  }},
+  { type: "function", function: {
     name: "python_exec",
     description: "Run Python in the workspace. Pass inline code or a .py path. Last expression prints.",
     parameters: { type: "object", properties: {
@@ -517,7 +542,7 @@ const GOAR_API_TOOLS = [
   }},
   { type: "function", function: {
     name: "generate_image",
-    description: "Generate an image with Pollinations (no API key). Returns a CDN JPEG URL. model=flux|turbo|flux-realism. size=1:1|16:9|9:16|4:3 or width/height. save=true writes JPEG to Kali path.",
+    description: "Generate an image with Pollinations (no API key). Returns a CDN JPEG URL. model=flux|turbo|flux-realism|flux-anime|gptimage|sana. size=1:1|16:9|9:16|4:3 or width/height. save=true writes JPEG to Kali path.",
     parameters: { type: "object", properties: {
       prompt: { type: "string" },
       model: { type: "string" },
@@ -528,6 +553,20 @@ const GOAR_API_TOOLS = [
       save: { type: "boolean" },
       path: { type: "string" }
     }, required: ["prompt"] }
+  }},
+  { type: "function", function: {
+    name: "mcp_list",
+    description: "List tools on configured MCP servers (HTTPS JSON-RPC). Optional url to query one server.",
+    parameters: { type: "object", properties: { url: { type: "string" } } }
+  }},
+  { type: "function", function: {
+    name: "mcp_call",
+    description: "Call an MCP tool. url defaults to the first server in Settings. name is the MCP tool name. arguments is a JSON object.",
+    parameters: { type: "object", properties: {
+      url: { type: "string" },
+      name: { type: "string" },
+      arguments: { type: "object" }
+    }, required: ["name"] }
   }}
 ];
 

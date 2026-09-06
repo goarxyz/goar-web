@@ -20,18 +20,25 @@ async function runSetup() {
         })
       : Promise.resolve(null);
     try { if (typeof startGeckoWarm === "function") startGeckoWarm(); } catch (_) {}
+    await Promise.resolve();
+    try {
+      if (typeof finishEnterChat === "function") finishEnterChat();
+      else if (typeof startOnboard === "function") startOnboard();
+    } catch (_) {}
     let boot = Promise.resolve();
-    const skipUnix = (typeof GOAR_SKIP_WASM_UNIX !== "undefined" && GOAR_SKIP_WASM_UNIX)
-      || (typeof GOAR_KALI_ONLY !== "undefined" && GOAR_KALI_ONLY);
+    const skipUnix = (typeof GOAR_SKIP_WASM_UNIX !== "undefined" && GOAR_SKIP_WASM_UNIX);
     if (!skipUnix && typeof bootWasmUnix === "function") {
       boot = bootWasmUnix();
     }
-    const waitMs = (typeof GOAR_SSH_BOOT_MS === "number" && GOAR_SSH_BOOT_MS > 0) ? GOAR_SSH_BOOT_MS : 75000;
+    const waitMs = (typeof GOAR_SSH_BOOT_MS === "number" && GOAR_SSH_BOOT_MS > 0) ? GOAR_SSH_BOOT_MS : 130000;
     await Promise.race([
       sshBoot,
       new Promise((r) => setTimeout(r, waitMs)),
     ]);
     boot.catch(function (e) { console.warn("[goar] unix boot", e); });
+    boot.then(function () {
+      try { if (typeof preloadGoarPeak === "function") preloadGoarPeak(); } catch (_) {}
+    }).catch(function (e) { console.warn("[goar] boot", e); });
     try {
       const st = typeof sshStatus === "function" ? sshStatus() : null;
       if (typeof setProgress === "function") {
@@ -40,12 +47,6 @@ async function runSetup() {
     } catch (_) {
       try { if (typeof setProgress === "function") setProgress(100, "Ready", ""); } catch (__) {}
     }
-    try { if (typeof showCredPhase === "function") showCredPhase(); } catch (_) {}
-    boot.then(() => {
-      try {
-        if (typeof preloadGoarPeak === "function") preloadGoarPeak();
-      } catch (_) {}
-    }).catch((e) => console.warn("[goar] boot", e));
     sshBoot.then(function (st) {
       if (st && st.ready) {
         try { if (typeof __goarMarkEnvReady === "function") __goarMarkEnvReady(true, "ssh-boot"); } catch (_) {}

@@ -136,6 +136,10 @@ async function runAgentTool(name, args) {
       return typeof toolGenerateImage === "function"
         ? toolGenerateImage(args)
         : JSON.stringify({ ok: false, error: "pollinations missing" });
+    case "mcp_list":
+      return typeof toolMcpList === "function" ? toolMcpList(args) : JSON.stringify({ ok: false, error: "mcp missing" });
+    case "mcp_call":
+      return typeof toolMcpCall === "function" ? toolMcpCall(args) : JSON.stringify({ ok: false, error: "mcp missing" });
     case "browse": {
       const url = args && args.url;
       if (!url) return JSON.stringify({ ok: false, error: "url required" });
@@ -170,6 +174,8 @@ async function runAgentTool(name, args) {
     case "py_check": return toolPyCheck(args);
     case "net_diag": return toolNetDiag(args);
     case "todo": return toolTodo(args);
+    case "skill":
+      return typeof toolSkill === "function" ? toolSkill(args) : "error: skills missing";
     case "create_plan": return toolCreatePlan(args);
     case "update_plan_step": return toolUpdatePlanStep(args);
     case "update_ledger": return toolUpdateLedger(args);

@@ -8,6 +8,50 @@ function markTermReady() {
     const tab = document.getElementById("term-tab");
     if (tab) tab.classList.remove("loading");
     window.__GOAR_TERM_READY = true;
+    paintTermStatus();
+  } catch (_) {}
+}
+
+function termGuestWrite(data) {
+  if (typeof sshReady === "function" && sshReady() && typeof sshWrite === "function") {
+    try { sshWrite(data); return "ssh"; } catch (_) {}
+  }
+  if (window.__GOAR_UNIX && typeof unixOnData === "function") {
+    try { unixOnData(data); return "unix"; } catch (_) {}
+  }
+  return "";
+}
+
+function paintTermStatus() {
+  const el = document.getElementById("term-status");
+  if (!el) return;
+  let bits = [];
+  try {
+    if (typeof sshReady === "function" && sshReady()) {
+      const st = typeof sshStatus === "function" ? sshStatus() : {};
+      bits.push((st.user || "root") + "@" + (st.host || "kali"));
+      if (st.port) bits.push(":" + st.port);
+    } else if (window.Unix && window.Unix.ready) {
+      bits.push("BusyBox");
+    } else {
+      bits.push("connecting");
+    }
+  } catch (_) { bits.push("term"); }
+  try {
+    if (typeof term !== "undefined" && term) bits.push(term.cols + "×" + term.rows);
+  } catch (_) {}
+  el.textContent = bits.join(" · ");
+}
+
+function pushSshTtySize() {
+  try {
+    if (typeof term === "undefined" || !term) return;
+    const c = term.cols | 0, r = term.rows | 0;
+    if (c < 8 || r < 4) return;
+    const sess = window.SSH && window.SSH.sock && window.SSH.sock.session;
+    if (sess && typeof sess.resizeTerminal === "function") {
+      sess.resizeTerminal(c, r).catch(function () {});
+    }
   } catch (_) {}
 }
 
@@ -15,21 +59,24 @@ function initTerm() {
   if (typeof Terminal === "undefined") throw new Error("terminal failed to load");
   term = new Terminal({
     cursorBlink: true,
-    cursorStyle: "block",
-    fontFamily: 'ui-monospace,"SF Mono",Menlo,Consolas,monospace',
+    cursorStyle: "bar",
+    fontFamily: 'JetBrains Mono,ui-monospace,"SF Mono",Menlo,Consolas,monospace',
     fontSize: 13,
-    lineHeight: 1.2,
+    lineHeight: 1.25,
+    letterSpacing: 0,
     theme: {
       background: "#050505", foreground: "#f2f2f2", cursor: "#f2f2f2", cursorAccent: "#050505",
-      selectionBackground: "#ffffff22",
+      selectionBackground: "#ffffff28",
       black:"#050505", red:"#b8b8b8", green:"#f2f2f2", yellow:"#d0d0d0",
       blue:"#9a9a9a", magenta:"#c8c8c8", cyan:"#aeaeae", white:"#f2f2f2",
       brightBlack:"#4d4d4d", brightRed:"#d0d0d0", brightGreen:"#ffffff", brightYellow:"#e8e8e8",
       brightBlue:"#c0c0c0", brightMagenta:"#eeeeee", brightCyan:"#d8d8d8", brightWhite:"#fff",
     },
-    scrollback: 10000,
+    scrollback: 12000,
     convertEol: true,
     allowProposedApi: true,
+    macOptionIsMeta: true,
+    rightClickSelectsWord: true,
   });
   fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
@@ -40,91 +87,120 @@ function initTerm() {
   try { fitAddon.fit(); } catch (_) {}
   try { if (typeof attachTermView === "function") attachTermView(); } catch (_) {}
   markTermReady();
-  // xterm → serial: Linux line discipline wants LF; map CR→LF
-  let _typed = "";
   term.onData((data) => {
-    if (typeof sshReady === "function" && sshReady() && typeof sshWrite === "function") {
-      try { sshWrite(data); } catch (_) {}
-      return;
+    const via = termGuestWrite(data);
+    if (via) return;
+    if (typeof ensureSsh === "function" && !window.__GOAR_TERM_SSH_KICK) {
+      window.__GOAR_TERM_SSH_KICK = true;
+      ensureSsh({ reason: "term" }).then(function (st) {
+        window.__GOAR_TERM_SSH_KICK = false;
+        if (st && st.ready) termGuestWrite(data);
+      }).catch(function () { window.__GOAR_TERM_SSH_KICK = false; });
     }
-    if (typeof ensureSsh === "function") {
-      try {
-        ensureSsh({ reason: "term" }).then(function (st) {
-          if (st && st.ready && typeof sshWrite === "function") {
-            try { sshWrite(data); } catch (_) {}
-          }
-        }).catch(function () {});
-      } catch (_) {}
-    }
-    if (window.__GOAR_UNIX && typeof unixOnData === "function") {
-      unixOnData(data);
-      return;
-    }
-    const emu = emulator || window.__emulator;
-    const send = window.__serialSend || (emu && function (s) { emu.serial0_send(s); });
-    if (!send) return;
-    if (data === "\r" || data === "\n") {
-      const line = _typed.trim();
-      _typed = "";
-      const pip = line.match(/^(?:sudo\s+)?(?:python3?\s+-m\s+)?pip3?\s+install\s+(.+)$/i);
-      if (pip && typeof guestPipInstall === "function") {
-        try { send("\u0003"); } catch (_) {}
-        try { term.write("\r\n\x1b[90minstalling " + pip[1].trim() + " …\x1b[0m\r\n"); } catch (_) {}
-        guestPipInstall(pip[1].trim()).then(function (r) {
-          const body = String((r && (r.output || r.error)) || JSON.stringify(r) || "").replace(/\n/g, "\r\n");
-          try {
-            term.write((r && r.ok ? "\x1b[32m" : "\x1b[31m") + (r && r.via ? r.via : "") + "\x1b[0m\r\n");
-            term.write(body.slice(0, 6000) + "\r\n");
-          } catch (_) {}
-          try { send("\r"); } catch (_) {}
-        }).catch(function (e) {
-          try { term.write("\x1b[31m" + String(e && e.message ? e.message : e) + "\x1b[0m\r\n"); } catch (_) {}
-          try { send("\r"); } catch (_) {}
-        });
-        return;
-      }
-    } else if (data === "\u007f" || data === "\b") {
-      _typed = _typed.slice(0, -1);
-    } else if (data === "\u0003" || data === "\u0015") {
-      _typed = "";
-    } else if (data.length === 1 && data >= " ") {
-      _typed += data;
-    } else if (data.length > 1 && data.indexOf("\x1b") < 0) {
-      _typed += data;
-    }
-    try {
-      send(String(data).replace(/\r\n/g, "\r").replace(/\n/g, "\r"));
-    } catch (_) {}
+    if (window.__GOAR_UNIX && typeof unixOnData === "function") return;
+    try { term.write(data === "\r" ? "\r\n" : data.replace(/\x7f/g, "\b \b")); } catch (_) {}
   });
-  // Push geometry to guest TTY when xterm resizes
-  let _ttySized = false;
-  const pushTtySize = () => {
-    if (_ttySized || !emulator || !term) return;
-    try {
-      const c = term.cols | 0, r = term.rows | 0;
-      if (c > 0 && r > 0) {
-        _ttySized = true;
-        const cmd = "stty -echo 2>/dev/null; stty cols " + c + " rows " + r
-          + " 2>/dev/null; export COLUMNS=" + c + " LINES=" + r + "; stty echo 2>/dev/null";
-        emulator.serial0_send(cmd + "\n");
+  try {
+    term.attachCustomKeyEventHandler(function (ev) {
+      if (!ev || ev.type !== "keydown") return true;
+      if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && (ev.key === "C" || ev.key === "c")) {
+        copyTermSel();
+        return false;
       }
-    } catch (_) {}
-  };
-  window.__pushTtySize = pushTtySize;
+      if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && (ev.key === "V" || ev.key === "v")) {
+        pasteTerm();
+        return false;
+      }
+      return true;
+    });
+  } catch (_) {}
   const host = document.getElementById("term-stage") || termMount;
   if (host && host.addEventListener) host.addEventListener("pointerdown", focusLiveTerm);
   window.addEventListener("resize", () => {
     try { fitAddon.fit(); } catch (_) {}
-    /* no stty spam */
+    pushSshTtySize();
+    paintTermStatus();
   });
   if (window.visualViewport) {
     window.visualViewport.addEventListener("resize", () => {
       try { fitAddon.fit(); } catch (_) {}
-      /* no stty spam */
     });
   }
-  // expose for post-boot
-  window.__pushTtySize = pushTtySize;
+  wireTermChrome();
+}
+
+function copyTermSel() {
+  try {
+    const t = term && term.getSelection ? term.getSelection() : "";
+    if (t && navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t);
+  } catch (_) {}
+}
+
+function pasteTerm() {
+  const send = function (t) {
+    if (!t) return;
+    termGuestWrite(t.replace(/\r\n/g, "\n").replace(/\r/g, "\n"));
+  };
+  if (navigator.clipboard && navigator.clipboard.readText) {
+    navigator.clipboard.readText().then(send).catch(function () {});
+    return;
+  }
+}
+
+function sendTermLine(line) {
+  const s = String(line == null ? "" : line);
+  const payload = /[\r\n]$/.test(s) ? s : s + "\n";
+  const via = termGuestWrite(payload);
+  if (!via) {
+    try { term.write(payload.replace(/\n/g, "\r\n")); } catch (_) {}
+  }
+  return via || "echo";
+}
+
+function wireTermChrome() {
+  if (wireTermChrome._on) return;
+  wireTermChrome._on = true;
+  const copy = document.getElementById("term-copy");
+  const paste = document.getElementById("term-paste");
+  const fit = document.getElementById("term-fit");
+  const form = document.getElementById("term-cmd");
+  const line = document.getElementById("term-line");
+  if (copy) copy.addEventListener("click", copyTermSel);
+  if (paste) paste.addEventListener("click", pasteTerm);
+  if (fit) fit.addEventListener("click", function () {
+    try { fitAddon.fit(); } catch (_) {}
+    pushSshTtySize();
+    focusLiveTerm();
+  });
+  if (form && line) {
+    const hist = [];
+    let histI = 0;
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      const v = line.value;
+      line.value = "";
+      if (v.trim()) {
+        hist.push(v);
+        if (hist.length > 80) hist.shift();
+        histI = hist.length;
+      }
+      sendTermLine(v);
+      focusLiveTerm();
+    });
+    line.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (!hist.length) return;
+        histI = Math.max(0, histI - 1);
+        line.value = hist[histI] || "";
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        histI = Math.min(hist.length, histI + 1);
+        line.value = histI >= hist.length ? "" : (hist[histI] || "");
+      }
+    });
+  }
+  setInterval(paintTermStatus, 2500);
 }
 
 function focusLiveTerm() {
@@ -140,6 +216,7 @@ function focusLiveTerm() {
       ta.style.opacity = "0";
       ta.style.zIndex = "8";
       ta.removeAttribute("disabled");
+      ta.readOnly = false;
       ta.focus();
     }
   } catch (_) {}
@@ -163,69 +240,20 @@ function attachTermView() {
   const fit = () => {
     try { if (fitAddon && fitAddon.fit) fitAddon.fit(); } catch (_) {}
     focusLiveTerm();
+    pushSshTtySize();
+    paintTermStatus();
   };
   fit();
   requestAnimationFrame(() => {
     fit();
     requestAnimationFrame(fit);
   });
-  try {
-    if (typeof sshReady === "function" && sshReady() && typeof sshWrite === "function") {
-      sshWrite("stty echo 2>/dev/null; export PS1='GOAR# '\n");
-    } else if (typeof ensureSsh === "function") {
-      ensureSsh({ reason: "term" }).catch(function () {});
-    }
-  } catch (_) {}
   if (stage && !stage._goarFocus) {
     stage._goarFocus = true;
     stage.addEventListener("pointerdown", () => focusLiveTerm());
   }
-  try {
-    const up = (typeof envReady !== "undefined" && envReady) || window.__GOAR_ENV_READY || window.__emulator || window.__GOAR_UNIX;
-    if (up && typeof markTermReady === "function") markTermReady();
-    if (up && window.__GOAR_UNIX) {
-      if (!window.__GOAR_TERM_HINT && term && term.write) {
-        window.__GOAR_TERM_HINT = true;
-      }
-      return;
-    }
-    if (up && typeof markTermReady === "function") markTermReady();
-    if (up && typeof fixGuestTty === "function") {
-      window.__ttyFixed = false;
-      fixGuestTty();
-    }
-    try {
-      const emu = window.__emulator || (typeof emulator !== "undefined" ? emulator : null);
-      if (emu && emu.serial0_send) {
-        emu.serial0_send("stty sane echo icanon icrnl opost onlcr 2>/dev/null; echo\n");
-      }
-    } catch (_) {}
-    if (up && !window.__GOAR_TERM_HINT && term && term.write) {
-      window.__GOAR_TERM_HINT = true;
-      term.write("\r\n\x1b[90munix  ·  python3  ·  pip install <pkg>\x1b[0m\r\n");
-    }
-    if (up && typeof ensureGuestNet === "function" && !window.__GOAR_TERM_NET) {
-      window.__GOAR_TERM_NET = true;
-      ensureGuestNet().catch(function () {});
-    }
-  } catch (_) {}
+  markTermReady();
 }
-
-
-/** One-shot guest TTY repair over serial (job control + size) */
-function fixGuestTty() {
-  if (!emulator || window.__ttyFixed) return;
-  window.__ttyFixed = true;
-  try {
-    const c = (term && term.cols) || 100;
-    const r = (term && term.rows) || 30;
-    const cmd = "stty -echo 2>/dev/null; stty sane cols " + c + " rows " + r
-      + " 2>/dev/null; export TERM=xterm-256color COLUMNS=" + c + " LINES=" + r
-      + "; stty echo 2>/dev/null; echo [goar-seq] tty-ok";
-    emulator.serial0_send(cmd + "\n");
-  } catch (_) {}
-}
-
 
 function setRunning(on, text) {
   try {
@@ -237,22 +265,12 @@ function setRunning(on, text) {
 }
 
 function send(cmd) {
-  if (!emulator) return;
-  try {
-    const s = /[\r\n]$/.test(cmd) ? cmd.replace(/\n/g, "\r") : cmd + "\r";
-    if (typeof emulator.serial0_send === "function") emulator.serial0_send(s);
-  } catch (_) {}
+  sendTermLine(cmd);
 }
 
-/** Host automation: hide command echo on guest TTY */
 function sendQuiet(cmd) {
-  if (!emulator) return;
-  const body = cmd.endsWith("\n") ? cmd.slice(0, -1) : cmd;
-  try {
-    emulator.serial0_send("stty -echo 2>/dev/null\n");
-    emulator.serial0_send(body + "\r");
-    emulator.serial0_send("stty echo 2>/dev/null\n");
-  } catch (_) {}
+  const body = String(cmd || "").replace(/\s+$/, "");
+  termGuestWrite("stty -echo 2>/dev/null\n" + body + "\n" + "stty echo 2>/dev/null\n");
 }
 function shellQuote(s) {
   return "'" + String(s).replace(/'/g, "'\\''") + "'";
@@ -262,12 +280,13 @@ function waitForSerial(patterns, timeoutMs) {
   const list = Array.isArray(patterns) ? patterns : [patterns];
   const regs = list.map((p) => (p instanceof RegExp ? p : new RegExp(p)));
   const start = Date.now();
-  const baseline = serialBuf.length;
+  const baseline = (typeof serialBuf !== "undefined" && serialBuf) ? serialBuf.length : 0;
   return new Promise((resolve) => {
     const tick = () => {
-      const slice = serialBuf.slice(Math.max(0, baseline - 200));
+      const buf = (typeof serialBuf !== "undefined" && serialBuf) ? serialBuf : ((window.SSH && window.SSH.buf) || "");
+      const slice = buf.slice(Math.max(0, baseline - 200));
       for (const r of regs) {
-        if (r.test(slice) || r.test(serialBuf.slice(-800))) {
+        if (r.test(slice) || r.test(buf.slice(-800))) {
           resolve(true);
           return;
         }
@@ -285,13 +304,11 @@ function waitForSerial(patterns, timeoutMs) {
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 function settingsEnvBody() {
-  const s = ensureDefaultSettings();
+  const s = typeof ensureDefaultSettings === "function" ? ensureDefaultSettings() : {};
   const key = (s.apiKey || "").trim();
   if (!key) return null;
-  const base = (s.apiBase || DEFAULTS.apiBase).replace(/\/+$/, "");
-  const model = (s.apiModel || DEFAULTS.apiModel).trim();
-  const dnsMap = window.__GOAR_DNS_MAP || s.dnsMap || "";
-  // Fully OpenAI-compatible env — works with NIM, OpenAI, Groq, OpenRouter, custom, ...
+  const base = (s.apiBase || "").replace(/\/+$/, "");
+  const model = (s.apiModel || "").trim();
   const lines = [
     "export OPENAI_API_KEY=" + shellQuote(key),
     "export GOAR_API_KEY=" + shellQuote(key),
@@ -300,32 +317,15 @@ function settingsEnvBody() {
     "export OPENAI_MODEL=" + shellQuote(model),
     "export GOAR_MODEL=" + shellQuote(model),
     "export GOAR_AUTO_APPROVE=1",
-    "export GOAR_OPERATOR_CORE=1",
-    "export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
-    "export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt",
-    "export CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt",
-    "export PYTHONPATH=/usr/lib/python3.11/site-packages",
-    "export PYTHONUNBUFFERED=1",
-    "export PIP_BREAK_SYSTEM_PACKAGES=1",
     "export TERM=xterm-256color",
     "export COLORTERM=truecolor",
-    "export COLUMNS=100",
-    "export LINES=30",
-    "export GOAR_WORKDIR=/workspace",
-    "export GOAR_CONFIG_DIR=/opt/goar",
-    "unset GOAR_PROXY_LIST",
   ];
-  // NVIDIA aliases only when using NIM
-  if (/nvidia\.com/i.test(base) || key.startsWith("nvapi-")) {
-    lines.push("export NVIDIA_API_KEY=" + shellQuote(key));
-    lines.push("export NGC_API_KEY=" + shellQuote(key));
-  }
-  if (dnsMap) lines.push("export GOAR_DNS_MAP=" + shellQuote(dnsMap));
   return lines.join("\n") + "\n";
 }
 
-
-
-
-
-/* Parse custom DNS: NextDNS id, DoH URL, or comma-separated IPs */
+try {
+  window.sendTermLine = sendTermLine;
+  window.focusLiveTerm = focusLiveTerm;
+  window.paintTermStatus = paintTermStatus;
+  window.settingsEnvBody = settingsEnvBody;
+} catch (_) {}

@@ -21,6 +21,11 @@ async function openaiChatStream({
   if ((getProvider(provider)?.requiresApiKey) && !(s.apiKey || "").trim() && !getProvider(provider)?.supportsOptionalApiKey) {
     throw new Error("No API key — open Settings and paste your key.");
   }
+  const p = typeof getProvider === "function" ? getProvider(provider) : null;
+  if (p && p.supportsStreaming === false) {
+    const data = await openaiChat({ messages, tools, stream: false, includeTools, signal });
+    return normalizeChatResultFromJson(data, onTextDelta, onThinkingDelta);
+  }
   const body = (typeof resolveChatBody === "function")
     ? resolveChatBody(s, messages, tools, true, includeTools)
     : {

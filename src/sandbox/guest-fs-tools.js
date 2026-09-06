@@ -237,7 +237,7 @@ async function toolWebFetch(args) {
         let text = r.body || "";
         const ct = (r.headers && (r.headers["content-type"] || r.headers["Content-Type"])) || "";
         if (!extract && (String(ct).includes("html") || /<html/i.test(text.slice(0, 200)))) {
-          text = text.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          text = text.replace(new RegExp("<script[\\s\\S]*?<" + "/script>", "gi"), " ").replace(new RegExp("<style[\\s\\S]*?<" + "/style>", "gi"), " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
         }
         return "HTTP " + r.status + " " + url + " [" + (r.via || "?") + "]\n\n" + text.slice(0, max);
       }

@@ -124,6 +124,129 @@
     return out;
   }
 
+  function sshWispPool() {
+    const pool = [];
+    const push = function (u) {
+      u = String(u || "").trim();
+      if (!u) return;
+      if (u.indexOf("wisp://") === 0) u = "ws://" + u.slice(7);
+      if (u.indexOf("wisps://") === 0) u = "wss://" + u.slice(8);
+      if (pool.indexOf(u) < 0) pool.push(u);
+    };
+    try { push(resolveWisp()); } catch (_) {}
+    try {
+      const s = typeof loadSettings === "function" ? loadSettings() : {};
+      if (s && s.wispUrl) push(s.wispUrl);
+    } catch (_) {}
+    try {
+      const saved = localStorage.getItem("goar_wisp_url");
+      if (saved) push(saved);
+    } catch (_) {}
+    push("wss://wisp.mercurywork.shop/");
+    return pool;
+  }
+
+  let _epoxyMod = null;
+  let _epoxyClients = {};
+
+  async function loadEpoxyMod() {
+    if (_epoxyMod) return _epoxyMod;
+    if (global.__GOAR_EPOXY_MOD) {
+      _epoxyMod = global.__GOAR_EPOXY_MOD;
+      return _epoxyMod;
+    }
+    const url = (typeof goarAssetUrl === "function")
+      ? goarAssetUrl("assets/net/epoxy/epoxy-bundled.js")
+      : "./assets/net/epoxy/epoxy-bundled.js";
+    const mod = await import(url);
+    if (!global.__GOAR_EPOXY_INIT) {
+      await (mod.default || mod.__wbg_init)();
+      global.__GOAR_EPOXY_INIT = true;
+    }
+    _epoxyMod = mod;
+    global.__GOAR_EPOXY_MOD = mod;
+    return mod;
+  }
+
+  async function epoxyClient(wispUrl) {
+    if (global.__GOAR_EPOXY && global.__GOAR_EPOXY_WISP === wispUrl) return global.__GOAR_EPOXY;
+    if (_epoxyClients[wispUrl]) return _epoxyClients[wispUrl];
+    const mod = await loadEpoxyMod();
+    const opts = new mod.EpoxyClientOptions();
+    opts.wisp_v2 = false;
+    opts.udp_extension_required = false;
+    const c = new mod.EpoxyClient(wispUrl, opts);
+    _epoxyClients[wispUrl] = c;
+    if (!global.__GOAR_EPOXY) {
+      global.__GOAR_EPOXY = c;
+      global.__GOAR_EPOXY_WISP = wispUrl;
+    }
+    return c;
+  }
+
+  async function openEpoxyTcp(host, port, wispUrl, tls) {
+    const client = await epoxyClient(wispUrl);
+    const spec = "tcp://" + host + ":" + Number(port);
+    const opener = tls && typeof client.connect_tls === "function"
+      ? client.connect_tls.bind(client)
+      : client.connect_tcp.bind(client);
+    const stream = await Promise.race([
+      opener(spec),
+      sleep(tls ? 15000 : 10000).then(function () { throw new Error((tls ? "tls" : "tcp") + " connect timeout"); }),
+    ]);
+    if (!stream || !stream.read || !stream.write) throw new Error("epoxy stream missing");
+    const reader = stream.read.getReader();
+    const writer = stream.write.getWriter();
+    const sock = {
+      open: true,
+      engine: tls ? "epoxy-tls" : "epoxy",
+      wispUrl: wispUrl,
+      _hold: [],
+      _ondata: null,
+      write: function (u8) {
+        if (!sock.open) throw new Error("tcp closed");
+        const d = u8 instanceof Uint8Array ? u8 : enc(u8);
+        return writer.write(d);
+      },
+      close: function () {
+        sock.open = false;
+        try { writer.close(); } catch (_) {}
+        try { reader.cancel(); } catch (_) {}
+      },
+      onclose: null,
+    };
+    Object.defineProperty(sock, "ondata", {
+      configurable: true,
+      get: function () { return sock._ondata; },
+      set: function (fn) {
+        sock._ondata = fn;
+        if (typeof fn === "function" && sock._hold.length) {
+          const q = sock._hold.splice(0);
+          for (let i = 0; i < q.length; i++) {
+            try { fn(q[i]); } catch (_) {}
+          }
+        }
+      },
+    });
+    (async function () {
+      try {
+        for (;;) {
+          const step = await reader.read();
+          if (step.done) break;
+          const chunk = step.value instanceof Uint8Array ? step.value : new Uint8Array(step.value);
+          const copy = chunk.slice();
+          if (typeof sock._ondata === "function") sock._ondata(copy);
+          else sock._hold.push(copy);
+        }
+      } catch (e) {
+        log("epoxy read", e && e.message ? e.message : e);
+      }
+      sock.open = false;
+      if (typeof sock.onclose === "function") sock.onclose();
+    })();
+    return sock;
+  }
+
   function openWispMux(url) {
     return new Promise((resolve, reject) => {
       let ws;
@@ -168,6 +291,7 @@
       ws.onclose = function () {
         mux.alive = false;
         streams.forEach(function (s) {
+          s.open = false;
           try {
             if (s.onclose) s.onclose();
           } catch (_) {}
@@ -179,19 +303,40 @@
         }
       };
       ws.onmessage = function (ev) {
-        const buf = ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : ev.data;
+        const buf = ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : new Uint8Array(ev.data);
         if (!buf || buf.length < 5) return;
         const type = buf[0];
         const id = new DataView(buf.buffer, buf.byteOffset, buf.byteLength).getUint32(1, true);
         const payload = buf.subarray(5);
-        if (type === 0x05) return; // INFO (v2)
+        if (type === 0x05) return;
         const s = streams.get(id);
         if (!s) return;
-        if (type === 0x02 && s.ondata) s.ondata(payload);
-        if (type === 0x03) s.window = new DataView(payload.buffer, payload.byteOffset, payload.byteLength).getUint32(0, true);
+        if (type === 0x02) {
+          const copy = payload.slice();
+          if (typeof s._ondata === "function") s._ondata(copy);
+          else if (typeof s.ondata === "function" && !Object.getOwnPropertyDescriptor(s, "ondata")) s.ondata(copy);
+          else {
+            s._hold = s._hold || [];
+            s._hold.push(copy);
+          }
+        }
+        if (type === 0x03) {
+          try {
+            s.window = new DataView(payload.buffer, payload.byteOffset, payload.byteLength).getUint32(0, true);
+          } catch (_) { s.window = 1; }
+          s._ready = true;
+          if (typeof s._flush === "function") s._flush();
+          if (typeof s._ok === "function") { s._ok(); s._ok = null; }
+        }
         if (type === 0x04) {
+          s.open = false;
           streams.delete(id);
-          if (s.onclose) s.onclose(payload[0]);
+          if (typeof s._bad === "function") {
+            const reason = payload && payload.length ? payload[0] : 0;
+            s._bad(new Error("wisp close " + reason));
+            s._bad = null;
+          }
+          if (s.onclose) s.onclose(payload && payload[0]);
         }
       };
       mux.close = function () {
@@ -205,7 +350,7 @@
         nextId += 2;
         const hostU8 = enc(host);
         const pl = new Uint8Array(1 + 2 + hostU8.length);
-        pl[0] = 0x01; // TCP
+        pl[0] = 0x01;
         new DataView(pl.buffer).setUint16(1, port, true);
         pl.set(hostU8, 3);
         const sock = {
@@ -214,11 +359,26 @@
           port: port,
           open: true,
           window: 0,
-          ondata: null,
+          _ready: false,
+          _q: [],
+          _hold: [],
+          _ondata: null,
           onclose: null,
           write: function (u8) {
+            const d = u8 instanceof Uint8Array ? u8 : enc(u8);
+            if (!sock._ready) {
+              sock._q.push(d);
+              return;
+            }
             if (!mux.alive || !sock.open) throw new Error("tcp closed");
-            ws.send(packWisp(0x02, id, u8 instanceof Uint8Array ? u8 : enc(u8)));
+            ws.send(packWisp(0x02, id, d));
+          },
+          _flush: function () {
+            sock._ready = true;
+            while (sock._q.length) {
+              if (!mux.alive || !sock.open) break;
+              ws.send(packWisp(0x02, id, sock._q.shift()));
+            }
           },
           close: function () {
             if (!sock.open) return;
@@ -229,11 +389,98 @@
             streams.delete(id);
           },
         };
+        Object.defineProperty(sock, "ondata", {
+          configurable: true,
+          get: function () { return sock._ondata; },
+          set: function (fn) {
+            sock._ondata = fn;
+            if (typeof fn === "function" && sock._hold && sock._hold.length) {
+              const q = sock._hold.splice(0);
+              for (let i = 0; i < q.length; i++) {
+                try { fn(q[i]); } catch (_) {}
+              }
+            }
+          },
+        });
+        sock.ready = new Promise(function (res, rej) {
+          sock._ok = res;
+          sock._bad = rej;
+        });
         streams.set(id, sock);
         ws.send(packWisp(0x01, id, pl));
         return sock;
       };
     });
+  }
+
+  function peekHeld(sock) {
+    const h = (sock && sock._hold) || [];
+    if (!h.length) return new Uint8Array(0);
+    return h.reduce(function (a, c) { return concat(a, c); }, new Uint8Array(0));
+  }
+
+  function sshBannerVerdict(u8) {
+    if (!u8 || !u8.length) return null;
+    if (u8[0] === 0x16 && u8[1] === 0x03) return false;
+    const t = dec(u8.subarray(0, 96));
+    if (/^SSH-/.test(t)) return true;
+    if (/HTTP\/|html>|<!DOCTYPE/i.test(t)) return false;
+    return null;
+  }
+
+  async function openSshTcp(host, port) {
+    const wisps = sshWispPool();
+    let last = null;
+    const tlsFirst = Number(port) === 443 || Number(port) === 8443;
+    for (let i = 0; i < wisps.length; i++) {
+      const url = wisps[i];
+      const modes = tlsFirst ? ["tls", "tcp"] : ["tcp"];
+      for (let m = 0; m < modes.length; m++) {
+        const tls = modes[m] === "tls";
+        try {
+          log("tcp epoxy", modes[m], host, port, url);
+          const sock = await openEpoxyTcp(host, port, url, tls);
+          await sleep(280);
+          const verdict = sshBannerVerdict(peekHeld(sock));
+          log("peek", modes[m], JSON.stringify(dec(peekHeld(sock)).slice(0, 60)), "verdict=" + verdict);
+          if (verdict === false) {
+            try { sock.close(); } catch (_) {}
+            throw new Error("not ssh banner (" + modes[m] + ")");
+          }
+          SSH.wispUrl = url;
+          SSH.mux = { engine: "epoxy-" + modes[m], url: url, close: function () { try { sock.close(); } catch (_) {} } };
+          return sock;
+        } catch (e) {
+          last = e;
+          log("epoxy fail", modes[m], url, e && e.message ? e.message : e);
+        }
+      }
+      try {
+        log("tcp mux", host, port, url);
+        const mux = await openWispMux(url);
+        const sock = mux.openTcp(host, port);
+        await Promise.race([
+          sock.ready,
+          sleep(7000).then(function () { throw new Error("wisp continue timeout"); }),
+        ]);
+        if (!sock.open) throw new Error("wisp stream closed");
+        await sleep(280);
+        const verdict = sshBannerVerdict(peekHeld(sock));
+        log("peek mux", JSON.stringify(dec(peekHeld(sock)).slice(0, 60)), "verdict=" + verdict);
+        if (verdict === false) {
+          try { sock.close(); } catch (_) {}
+          try { mux.close(); } catch (_) {}
+          throw new Error("not ssh banner (mux)");
+        }
+        SSH.mux = mux;
+        SSH.wispUrl = url;
+        return sock;
+      } catch (e) {
+        last = e;
+        log("mux fail", url, e && e.message ? e.message : e);
+      }
+    }
+    throw last || new Error("no WISP TCP to " + host + ":" + port);
   }
 
   /* ── SSH packet helpers (cleartext / post-NEWKEYS AES-CTR + HMAC-SHA256) ── */
@@ -336,35 +583,13 @@
     opts = opts || {};
     const user = opts.user || DEFAULT_USER;
     const pass = opts.password || DEFAULT_PASS;
-    const ident = "SSH-2.0-GOAR_1.0\r\n";
-    let incoming = new Uint8Array(0);
-    const waiters = [];
-    sock.ondata = function (chunk) {
-      incoming = concat(incoming, chunk);
-      SSH.raw = incoming;
-      const text = dec(incoming);
-      SSH.buf += text.slice(-4000);
-      captureSecret(text);
-      paintTerm(chunk);
-      for (let i = 0; i < waiters.length; i++) {
-        try {
-          waiters[i]();
-        } catch (_) {}
-      }
-    };
-    sock.onclose = function () {
-      SSH.ready = false;
-      SSH.drops += 1;
-      SSH.lastError = "tcp closed";
-      scheduleReconnect();
-    };
-    // Go WASM (sshclient-wasm) owns ident+kex. Hand the raw TCP socket first.
+
+    // Go WASM owns ident+kex+auth+pty. Do not attach a text decoder on
+    // the TCP socket — that would drain the SSH banner out of _hold.
     if (typeof global.__GOAR_SSH_DRIVE === "function") {
-      const drivenEarly = await global.__GOAR_SSH_DRIVE({
+      const driven = await global.__GOAR_SSH_DRIVE({
         sock: sock,
-        incoming: function () {
-          return incoming;
-        },
+        incoming: function () { return new Uint8Array(0); },
         user: user,
         password: pass,
         secret: opts.secret || readSecret(),
@@ -372,87 +597,11 @@
         port: opts.port,
         raw: true,
       });
-      if (drivenEarly && drivenEarly.ready) return drivenEarly;
-    }
-
-    sock.write(enc(ident));
-    const banner = await waitUntil(
-      function () {
-        return parseBanner(incoming);
-      },
-      8000,
-      waiters
-    );
-    if (!banner) throw new Error("no SSH banner from " + opts.host + ":" + opts.port);
-    SSH.banner = banner;
-    log("banner", banner);
-
-    if (typeof global.__GOAR_SSH_DRIVE !== "function") {
-      try {
-        sock.write(buildPacket(kexInitPayload(), 8));
-      } catch (_) {}
-    }
-
-    if (typeof global.__GOAR_SSH_DRIVE === "function") {
-      const driven = await global.__GOAR_SSH_DRIVE({
-        sock: sock,
-        incoming: function () {
-          return incoming;
-        },
-        user: user,
-        password: pass,
-        secret: opts.secret || readSecret(),
-        host: opts.host,
-        port: opts.port,
-        banner: banner,
-      });
       if (driven && driven.ready) return driven;
+      throw new Error("SSH engine returned without a session");
     }
 
-    // Interactive fallback: some WISP+SSH bridges accept raw PTY bytes after banner
-    // (tlsproxy-style). Drive password + SECRET as a line protocol with timeouts.
-    const secret = opts.secret || readSecret();
-    await sleep(250);
-    const snap = dec(incoming).toLowerCase();
-    if (/password/i.test(snap)) {
-      sock.write(enc(pass + "\n"));
-      await sleep(400);
-    }
-    if (secret && /secret|token|reconnect/i.test(dec(incoming))) {
-      sock.write(enc(secret + "\n"));
-      await sleep(400);
-    }
-    // Probe a real shell.
-    sock.write(enc("export HISTCONTROL=ignorespace; unset PROMPT_COMMAND; export PS1='GOAR# '; echo __GOAR_SSH_HELLO__\n"));
-    const hello = await waitUntil(
-      function () {
-        return /__GOAR_SSH_HELLO__/.test(dec(incoming));
-      },
-      12000,
-      waiters
-    );
-    if (!hello) {
-      throw new Error(
-        "SSH TCP opened (" +
-          banner +
-          ") but no shell yet — WISP reached " +
-          opts.host +
-          ":" +
-          opts.port +
-          ". Need encrypted session (kex) or a tlsproxy endpoint."
-      );
-    }
-    captureSecret(dec(incoming));
-    return {
-      ready: true,
-      write: function (s) {
-        sock.write(typeof s === "string" ? enc(s) : s);
-      },
-      incoming: function () {
-        return incoming;
-      },
-      sock: sock,
-    };
+    throw new Error("SSH engine missing (__GOAR_SSH_DRIVE)");
   }
 
   function waitUntil(pred, ms, waiters) {
@@ -510,6 +659,16 @@
 
   function sshReady() {
     return !!(SSH.ready && SSH.sock && SSH.sock.write);
+  }
+
+  function sshShellReady() {
+    if (!sshReady()) return false;
+    if (SSH.hello) return true;
+    try {
+      return /(?:^|\r|\n)__GOAR_SSH_HELLO__(?:\r|\n|$)/.test(SSH.buf || "");
+    } catch (_) {
+      return false;
+    }
   }
 
   let _reconnTimer = 0;
@@ -575,11 +734,9 @@
         await ensureMwFabric();
       } catch (_) {}
     }
-    const wisp = resolveWisp();
+    const wisp = sshWispPool()[0] || resolveWisp();
     SSH.wispUrl = wisp;
     SSH.secret = readSecret();
-    const mux = await openWispMux(wisp);
-    SSH.mux = mux;
     let last = null;
     const target = resolveSshTarget();
     if (target.secret) SSH.secret = target.secret;
@@ -588,11 +745,25 @@
       const port = ports[i];
       let sock;
       try {
-        sock = mux.openTcp(target.host, port);
+        sock = await openSshTcp(target.host, port);
       } catch (e) {
         last = e;
+        log("openTcp fail", target.host, port, e && e.message ? e.message : e);
         continue;
       }
+      const onClose = function () {
+        if (SSH.sock && SSH.sock.sock === sock) {
+          SSH.ready = false;
+          SSH.drops += 1;
+          SSH.lastError = "tcp closed";
+          scheduleReconnect();
+        }
+      };
+      const prevClose = sock.onclose;
+      sock.onclose = function () {
+        try { if (typeof prevClose === "function") prevClose(); } catch (_) {}
+        onClose();
+      };
       try {
         const sess = await sshSession(sock, {
           host: target.host,
@@ -666,6 +837,14 @@
       }
     }
     const run = async function () {
+      const tWait = Date.now();
+      while (Date.now() - tWait < 20000) {
+        if (sshShellReady()) break;
+        const c = global.__GOAR_SSH_CONFIRM;
+        if (c && (c.phase === "confirmed" || c.phase === "shell" || c.phase === "shell-no-confirm") && SSH.hello) break;
+        await sleep(150);
+      }
+      if (!sshReady()) return { code: -1, output: "Kali SSH dropped", via: "ssh" };
       const id = Math.random().toString(36).slice(2, 8);
       const start = "GOS" + id;
       const end = "GOE" + id;
@@ -677,7 +856,7 @@
         cmd +
         " ; } > /tmp/.gout." +
         id +
-        " 2>&1; EC=$?; tail -c 20000 /tmp/.gout." +
+        " 2>&1; EC=$?; tail -c 80000 /tmp/.gout." +
         id +
         " 2>/dev/null; echo " +
         end +
@@ -737,8 +916,8 @@
   }
 
   function sshOpenTcp(host, port) {
-    if (!SSH.mux || typeof SSH.mux.openTcp !== "function") throw new Error("WISP mux down");
-    return SSH.mux.openTcp(host, port);
+    if (SSH.mux && typeof SSH.mux.openTcp === "function") return SSH.mux.openTcp(host, port);
+    return openSshTcp(host, port);
   }
 
   try {
@@ -746,6 +925,7 @@
     global.ensureSsh = ensureSsh;
     global.sshExec = sshExec;
     global.sshReady = sshReady;
+    global.sshShellReady = sshShellReady;
     global.sshStatus = sshStatus;
     global.sshWrite = sshWrite;
     global.resolveSshTarget = resolveSshTarget;

@@ -67,6 +67,10 @@ function resolveChatBody(s, messages, tools, stream, includeTools) {
     }
   }
   try {
+    const p = typeof getProvider === "function" ? getProvider(s.provider || detectProvider(s.apiBase)) : null;
+    if (p && p.supportsStreaming === false) body.stream = false;
+  } catch (_) {}
+  try {
     if (/venice/i.test(String((s && s.provider) || "") + String((s && s.apiBase) || ""))) {
       body.venice_parameters = {
         include_venice_system_prompt: true,
@@ -87,6 +91,73 @@ function resolveChatBody(s, messages, tools, stream, includeTools) {
   return body;
 }
 
+async function goarPollinationsText(messages) {
+  let user = "";
+  for (let i = (messages || []).length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m && m.role === "user" && typeof m.content === "string" && m.content.trim()) {
+      user = m.content.trim().slice(0, 800);
+      break;
+    }
+  }
+  if (!user) user = "Hello";
+  const prompt = "You are GOAR. Answer as GOAR, briefly.\nUser: " + user;
+  const url = "https://text.pollinations.ai/" + encodeURIComponent(prompt);
+  const res = await Promise.race([
+    fetch(url, { method: "GET" }),
+    new Promise(function (_, rej) { setTimeout(function () { rej(new Error("timeout")); }, 12000); }),
+  ]);
+  const t = String(await res.text() || "").trim();
+  if (!res.ok || !t || /Payment Required|All free providers/i.test(t)) {
+    throw new Error("text fallback " + res.status);
+  }
+  return t.replace(/^GOAR:\s*/i, "").trim();
+}
+
+function asChatJson(text, toolCalls, model) {
+  return {
+    choices: [{
+      message: {
+        role: "assistant",
+        content: text || "",
+        tool_calls: toolCalls && toolCalls.length ? toolCalls : undefined,
+      },
+      finish_reason: toolCalls && toolCalls.length ? "tool_calls" : "stop",
+    }],
+    model: model || "GOAR",
+  };
+}
+
+async function goarFallbackChat({ messages, tools, includeTools, signal, onTextDelta }) {
+  try {
+    const text = await goarPollinationsText(messages);
+    if (text) {
+      if (onTextDelta) onTextDelta(text, text);
+      return asChatJson(text, [], "GOAR");
+    }
+  } catch (e) {
+    console.warn("[goar] text fallback", e);
+  }
+  if (typeof duckaiChat === "function") {
+    try {
+      const r = await duckaiChat({
+        messages: messages,
+        tools: includeTools ? tools : [],
+        includeTools: includeTools,
+        onTextDelta: onTextDelta,
+        signal: signal,
+      });
+      if (r && (r.content || r.text || (r.tool_calls && r.tool_calls.length))) {
+        if (onTextDelta && r.content) onTextDelta(r.content, r.content);
+        return asChatJson(r.content || r.text || "", r.tool_calls, r.model);
+      }
+    } catch (e) {
+      console.warn("[goar] duck fallback", e);
+    }
+  }
+  throw new Error("GOAR is busy — send again");
+}
+
 async function openaiChat({ messages, tools, stream = false, includeTools = true, signal = null }) {
   const s = settingsSnapshot();
   const provider = s.provider || detectProvider(s.apiBase);
@@ -101,6 +172,22 @@ async function openaiChat({ messages, tools, stream = false, includeTools = true
     const r = await localLlmChat({ messages, tools, includeTools });
     return r.raw;
   }
+  try {
+    return await openaiChatPrimary({ messages, tools, stream, includeTools, signal, s, provider });
+  } catch (e) {
+    const msg = String(e && e.message ? e.message : e);
+    if (/502|503|504|All free providers|timeout|Failed to fetch|network/i.test(msg) || (typeof isHiddenApiProvider === "function" && isHiddenApiProvider(provider, s.apiBase))) {
+      try {
+        return await goarFallbackChat({ messages, tools, includeTools, signal });
+      } catch (e2) {
+        throw e;
+      }
+    }
+    throw e;
+  }
+}
+
+async function openaiChatPrimary({ messages, tools, stream, includeTools, signal, s, provider }) {
   const base = normalizeApiBase(s.apiBase || DEFAULTS.apiBase, provider);
   const url = chatCompletionsUrl(base, provider);
   const model = (s.apiModel || "").trim();
@@ -149,6 +236,9 @@ async function openaiChat({ messages, tools, stream = false, includeTools = true
         continue;
       }
       if (resp.status >= 500 && resp.status <= 599) {
+        if (/All free providers/i.test(errText) || resp.status === 502) {
+          throw new Error(lastErr);
+        }
         if (/gateway_timeout|did not respond in time|gpu/i.test(errText)) {
           lastErr = "Free.ai GPU timed out — their demo cluster is busy. Retry in a few seconds, or set an sk-free- key / another provider in Settings.";
           if (typeof paintLiveWork === "function") paintLiveWork({ text: "Free.ai GPU busy — retrying" });
@@ -201,7 +291,7 @@ async function fetchModels(override) {
   if (!resp.ok) {
     const body = await resp.text().catch(() => "");
     const p = typeof getProvider === "function" ? getProvider(provider) : null;
-    if (p && Array.isArray(p.preferredModels) && p.preferredModels.length && /freeai|free\.ai/i.test(String(provider) + String(base))) {
+    if (p && Array.isArray(p.preferredModels) && p.preferredModels.length && /freeai|free\.ai|kai9000/i.test(String(provider) + String(base))) {
       return p.preferredModels.slice();
     }
     throw new Error("models HTTP " + resp.status + (body ? " · " + body.slice(0, 160) : ""));
@@ -288,7 +378,12 @@ function fillModelSelect(ids, selected, meta) {
     seen.add(id);
     const o = document.createElement("option");
     o.value = id;
-    o.textContent = label || id;
+    let shown = label || id;
+    try {
+      const s = typeof settingsSnapshot === "function" ? settingsSnapshot() : {};
+      if (typeof publicModelName === "function") shown = publicModelName(id, s.provider, s.apiBase);
+    } catch (_) {}
+    o.textContent = shown;
     sel.appendChild(o);
   };
   // Prefer live API list when present

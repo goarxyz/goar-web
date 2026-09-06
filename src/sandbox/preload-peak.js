@@ -93,11 +93,16 @@ json.dumps(out)
       );
     }
     jobs.push(warmBox().then((ok) => { state.box = !!ok; }));
-    jobs.push(
-      warmPythonPeak()
-        .then((info) => { state.pysec = info; })
-        .catch((e) => { state.pysec = { ok: false, error: String(e && e.message ? e.message : e) }; })
-    );
+    const skipPy = !!(global.GOAR_SKIP_PYODIDE || global.GOAR_KALI_ONLY);
+    if (!skipPy) {
+      jobs.push(
+        warmPythonPeak()
+          .then((info) => { state.pysec = info; })
+          .catch((e) => { state.pysec = { ok: false, error: String(e && e.message ? e.message : e) }; })
+      );
+    } else {
+      state.pysec = { skipped: true, engine: "busybox" };
+    }
     try { if (typeof startGeckoWarm === "function") startGeckoWarm(); } catch (_) {}
 
     await Promise.all(jobs);

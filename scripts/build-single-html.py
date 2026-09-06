@@ -19,6 +19,7 @@ css = [
     ("chat", "src/css/grok-chat.css"),
     ("particles", "src/css/particles-layer.css"),
     ("mono", "src/css/mono-jet.css"),
+    ("polish", "src/css/polish.css"),
 ]
 js = [
     "src/vendor/xterm.js",
@@ -83,7 +84,7 @@ for p in js:
 
 out.append("\n</body>\n</html>\n")
 text = "\n".join(out)
-dests = [root / "GOAR.html", Path("/workspace/GOAR.html")]
+dests = [root / "GOAR.html", Path("/workspace/GOAR.html"), Path("/workspace/public/GOAR.html")]
 for d in dests:
     d.write_text(text, encoding="utf-8")
     print("wrote", d, d.stat().st_size)

@@ -38,9 +38,13 @@ function scratchGuestFile(name) {
 
 async function ensureScratchpad() {
   GOAR_SCRATCH.sessionId = vibeSessionId();
-  if (typeof envReady !== "undefined" && envReady && typeof guestExec === "function") {
+  const sshReady = !!(typeof window !== "undefined" && window.__GOAR_SSH && window.__GOAR_SSH.ready);
+  if (sshReady && typeof guestExec === "function") {
     try {
-      await guestExec("mkdir -p " + GOAR_SCRATCH.guestPath, 12000);
+      await Promise.race([
+        guestExec("mkdir -p " + GOAR_SCRATCH.guestPath, 2000),
+        new Promise(function (r) { setTimeout(r, 400); }),
+      ]);
       GOAR_SCRATCH.ready = true;
     } catch (_) {
       GOAR_SCRATCH.ready = false;

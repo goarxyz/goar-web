@@ -3,7 +3,11 @@ function wireAgentUi() {
   refreshAgentPill();
   if (wireAgentUi._wired) return;
   wireAgentUi._wired = true;
-  agentEl.send?.addEventListener("click", () => sendCommand());
+  agentEl.send?.addEventListener("click", () => {
+    Promise.resolve(sendCommand()).catch(function (e) {
+      try { appendMsg(String(e && e.message ? e.message : e), "err"); } catch (_) {}
+    });
+  });
   agentEl.input?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendCommand(); }
     if (e.key === "Escape") { e.preventDefault(); requestAgentStop(); }

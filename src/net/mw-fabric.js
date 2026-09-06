@@ -21,6 +21,7 @@ const MANUS_LS = "pyodide_security_manus_api_key";
 const MANUS_LS_LEGACY = "goar_manus_key";
 
 const DEFAULT_WISP_POOL = [
+  "wss://wisp.mercurywork.shop/",
   "wss://cors.manus.space/wisp/",
 ];
 const MANUS_ORIGIN = (typeof window !== "undefined" && window.GOAR_MANUS_ORIGIN) || "https://cors.manus.space";
@@ -56,16 +57,21 @@ function wispPool() {
     const n = normalizeWispUrl(u);
     if (n && pool.indexOf(n) === -1) pool.push(n);
   };
-  const key = readManusKey();
-  push(manusWispUrl(key));
+  DEFAULT_WISP_POOL.forEach(push);
+  try {
+    const saved = localStorage.getItem("goar_wisp_url");
+    if (saved) push(saved);
+  } catch (_) {}
   try {
     const s = typeof loadSettings === "function" ? loadSettings() : {};
     if (s && s.wispUrl) push(s.wispUrl);
   } catch (_) {}
   if (typeof window !== "undefined" && window.GOAR_WISP_URL) {
-    const forced = String(window.GOAR_WISP_URL);
-    push(key && /cors\.manus\.space\/wisp/i.test(forced) ? manusWispUrl(key) : forced);
+    push(String(window.GOAR_WISP_URL));
   }
+  const key = readManusKey();
+  if (key) push(manusWispUrl(key));
+  push("wss://cors.manus.space/wisp/");
   return pool;
 }
 
@@ -431,7 +437,7 @@ async function goarHostFetch(url, opts) {
       input: opts.input,
       output: opts.output,
     });
-    if (man && (man.body || man.ok || man.status)) {
+    if (man && man.ok && (man.body || man.status)) {
       man.body = String(man.body || "").slice(0, maxBytes);
       man.ms = Math.round(performance.now() - t0);
       return man;
